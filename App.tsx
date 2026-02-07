@@ -4,6 +4,7 @@ import { Student, ObservationRecord, AppView, CurriculumDoc, Lesson, DocCategory
 import { INITIAL_STUDENTS, MOCK_OBSERVATION, INITIAL_DOCS, TIMETABLE as INITIAL_TIMETABLE, MOCK_LESSON_REPORTS } from './constants';
 import { generateStudentReport, analyzeLessonFidelity, generateFinalReport, analyzePdfContent, extractStudentNamesFromPdf, extractStudentInteractions, StudentInteraction } from './services/geminiService';
 import { uploadFileToGemini, deleteFileFromGemini } from './services/fileUploadService';
+import { initGoogleAuth, requestAccessToken, findDataFile, uploadToDrive, downloadFromDrive } from './services/googleDriveService';
 
 // --- Sub-components ---
 
@@ -622,8 +623,9 @@ const App: React.FC = () => {
     if (studentsUpdated) setStudents(finalStudents);
   }, [timetable, students]);
 
-  // 앱 시작 시 한 번만 마이그레이션 실행
+  // 앱 시작 시 한 번만 마이그레이션 실행 및 구글 인증 초기화
   useEffect(() => {
+    initGoogleAuth();
     const migrated = localStorage.getItem('data_migrated_v2');
     if (!migrated) {
       migrateAndSyncData();
@@ -1043,10 +1045,54 @@ const App: React.FC = () => {
   };
 
   const handleSyncToDrive = async () => {
-    setDriveSyncStatus('syncing');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setDriveSyncStatus('success');
-    setTimeout(() => setDriveSyncStatus('idle'), 5000);
+    try {
+      setDriveSyncStatus('syncing');
+
+      // 1. 액세스 토큰 요청 (구글 로그인 팝업)
+      const token = await requestAccessToken();
+
+      // 2. 현재 데이터 패키징 (기존 백업 로직 활용)
+      const dataToSync = {
+        students,
+        timetable,
+        docs,
+        teacherInfo,
+        lessonPlans: localStorage.getItem('lessonPlans'),
+        curriculum: localStorage.getItem('curriculum'),
+      };
+
+      // 3. 구글 드라이브에서 기존 파일 찾기
+      const existingFileId = await findDataFile(token);
+
+      if (existingFileId) {
+        // 기존 데이터가 있으면 사용자에게 확인 (덮어쓰기 vs 불러오기)
+        if (window.confirm('구글 드라이브에 기존 데이터가 있습니다.\n\n[확인]: 현재 데이터를 드라이브에 저장(덮어쓰기)\n[취소]: 드라이브의 데이터를 이 기기로 불러오기')) {
+          await uploadToDrive(token, dataToSync, existingFileId);
+          alert('✅ 구글 드라이브에 데이터가 저장되었습니다.');
+        } else {
+          const downloadedData = await downloadFromDrive(token, existingFileId);
+          if (downloadedData) {
+            // 데이터 복원
+            if (downloadedData.students) setStudents(downloadedData.students);
+            if (downloadedData.timetable) setTimetable(downloadedData.timetable);
+            if (downloadedData.docs) setDocs(downloadedData.docs);
+            if (downloadedData.teacherInfo) setTeacherInfo(downloadedData.teacherInfo);
+            alert('✅ 구글 드라이브에서 데이터를 불러왔습니다!');
+          }
+        }
+      } else {
+        // 파일이 없으면 새로 업로드
+        await uploadToDrive(token, dataToSync);
+        alert('✅ 구글 드라이브에 새 백업 파일이 생성되었습니다.');
+      }
+
+      setDriveSyncStatus('success');
+      setTimeout(() => setDriveSyncStatus('idle'), 3000);
+    } catch (error) {
+      console.error('동기화 오류:', error);
+      setDriveSyncStatus('idle');
+      alert('❌ 동기화에 실패했습니다. 구글 로그인을 확인해주세요.');
+    }
   };
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
