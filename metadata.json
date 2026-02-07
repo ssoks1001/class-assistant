@@ -1,0 +1,8 @@
+{
+  "name": "수업비서",
+  "description": "A sophisticated AI-powered application for managing student interactions and generating personalized academic record drafts based on classroom observations.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
