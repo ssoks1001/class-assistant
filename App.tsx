@@ -1176,7 +1176,7 @@ const App: React.FC = () => {
       achievementCriteria: '',
       day: Number(newLesson.day) || 0,
       period: Number(newLesson.period) || 1,
-      color: 'bg-indigo-100 text-indigo-700'
+      color: newLesson.color || 'bg-indigo-100 text-indigo-700'
     };
     const updated = [...timetable, lesson];
     setTimetable(updated);
@@ -1211,7 +1211,7 @@ const App: React.FC = () => {
         achievementCriteria: '',
         day: lessonData.day ?? 0,
         period: lessonData.period ?? 1,
-        color: 'bg-indigo-100 text-indigo-700'
+        color: lessonData.color || 'bg-indigo-100 text-indigo-700'
       };
       setTimetable(prev => [...prev, newLesson]);
     }
@@ -2067,8 +2067,8 @@ const App: React.FC = () => {
                     onClick={handleSyncToDrive}
                     disabled={driveSyncStatus === 'syncing'}
                     className={`h-14 w-full rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${driveSyncStatus === 'syncing'
-                        ? 'bg-slate-100 text-slate-400 shadow-none'
-                        : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/30'
+                      ? 'bg-slate-100 text-slate-400 shadow-none'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/30'
                       }`}
                   >
                     <span className={`material-symbols-outlined text-[20px] ${driveSyncStatus === 'syncing' ? 'animate-spin' : ''}`}>
