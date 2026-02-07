@@ -2036,12 +2036,37 @@ const App: React.FC = () => {
           <div className="animate-fade-in p-6 space-y-8 pb-32">
             <div className="flex flex-col gap-1"><h3 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>수업비서 셋업</h3><p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Configuration</p></div>
 
+            {/* 🆕 구글 드라이브 동기화 */}
+            <div className={`p-5 rounded-2xl border-2 ${isDarkMode ? 'bg-emerald-950/20 border-emerald-900/30' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined text-emerald-500 text-[24px]">sync</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className={`text-sm font-black ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>구글 드라이브 동기화</h4>
+                    {driveSyncStatus === 'syncing' && <span className="text-[10px] font-bold text-emerald-500 animate-pulse">동기화 중...</span>}
+                    {driveSyncStatus === 'success' && <span className="text-[10px] font-bold text-emerald-500 animate-bounce">완료!</span>}
+                  </div>
+                  <p className={`text-xs mb-3 ${isDarkMode ? 'text-emerald-400/70' : 'text-emerald-600'}`}>
+                    핸드폰과 PC 간에 데이터를 실시간으로 주고받습니다.
+                  </p>
+                  <button
+                    onClick={handleSyncToDrive}
+                    disabled={driveSyncStatus === 'syncing'}
+                    className={`w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 ${driveSyncStatus === 'syncing' ? 'bg-slate-300' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">google_auth</span>
+                    {driveSyncStatus === 'syncing' ? '연결 중...' : '지금 바로 동기화하기'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* 🆕 데이터 백업/복원 */}
             <div className={`p-5 rounded-2xl border-2 ${isDarkMode ? 'bg-blue-950/20 border-blue-900/30' : 'bg-blue-50 border-blue-200'}`}>
               <div className="flex items-start gap-3">
                 <span className="material-symbols-outlined text-blue-500 text-[24px]">backup</span>
                 <div className="flex-1">
-                  <h4 className={`text-sm font-black mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}>데이터 백업 및 복원</h4>
+                  <h4 className={`text-sm font-black mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-700'}`}>데이터 백업 및 복원 (오프라인)</h4>
                   <p className={`text-xs mb-3 ${isDarkMode ? 'text-blue-400/70' : 'text-blue-600'}`}>
                     모든 데이터를 JSON 파일로 백업하거나 복원할 수 있습니다.
                   </p>
