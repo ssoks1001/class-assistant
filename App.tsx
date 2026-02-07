@@ -2036,26 +2036,45 @@ const App: React.FC = () => {
           <div className="animate-fade-in p-6 space-y-8 pb-32">
             <div className="flex flex-col gap-1"><h3 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>수업비서 셋업</h3><p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Configuration</p></div>
 
-            {/* 🆕 구글 드라이브 동기화 */}
-            <div className={`p-5 rounded-2xl border-2 ${isDarkMode ? 'bg-emerald-950/20 border-emerald-900/30' : 'bg-emerald-50 border-emerald-200'}`}>
-              <div className="flex items-start gap-3">
-                <span className="material-symbols-outlined text-emerald-500 text-[24px]">sync</span>
+            {/* 🆕 구글 드라이브 클라우드 동기화 (프리미엄 디자인 적용) */}
+            <div className={`p-6 rounded-[2.5rem] border shadow-md relative overflow-hidden transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <span className="material-symbols-outlined text-[100px] rotate-12">cloud_sync</span>
+              </div>
+
+              <div className="flex items-start gap-4 relative z-10">
+                <div className={`size-12 rounded-2xl flex items-center justify-center font-black shadow-inner ${isDarkMode ? 'bg-emerald-500/10 text-emerald-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <span className="material-symbols-outlined text-[28px]">cloud_sync</span>
+                </div>
+
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <h4 className={`text-sm font-black ${isDarkMode ? 'text-emerald-400' : 'text-emerald-700'}`}>구글 드라이브 동기화</h4>
-                    {driveSyncStatus === 'syncing' && <span className="text-[10px] font-bold text-emerald-500 animate-pulse">동기화 중...</span>}
-                    {driveSyncStatus === 'success' && <span className="text-[10px] font-bold text-emerald-500 animate-bounce">완료!</span>}
+                    <h4 className={`text-lg font-black ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>구글 드라이브 클라우드 동기화</h4>
+                    <div className="flex items-center gap-2">
+                      {driveSyncStatus === 'syncing' && <div className="size-2 bg-emerald-500 rounded-full animate-pulse"></div>}
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${driveSyncStatus === 'syncing' ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`}>
+                        {driveSyncStatus === 'syncing' ? 'Syncing...' : 'Connected'}
+                      </span>
+                    </div>
                   </div>
-                  <p className={`text-xs mb-3 ${isDarkMode ? 'text-emerald-400/70' : 'text-emerald-600'}`}>
-                    핸드폰과 PC 간에 데이터를 실시간으로 주고받습니다.
+
+                  <p className="text-xs text-slate-400 font-bold mb-5 leading-relaxed">
+                    핸드폰과 PC 간에 실시간으로 데이터를 마법처럼 주고받습니다.<br />
+                    언제 어디서든 끊김 없는 수업 준비를 시작하세요.
                   </p>
+
                   <button
                     onClick={handleSyncToDrive}
                     disabled={driveSyncStatus === 'syncing'}
-                    className={`w-full py-3 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 ${driveSyncStatus === 'syncing' ? 'bg-slate-300' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
+                    className={`h-14 w-full rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${driveSyncStatus === 'syncing'
+                        ? 'bg-slate-100 text-slate-400 shadow-none'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/30'
+                      }`}
                   >
-                    <span className="material-symbols-outlined text-[20px]">google_auth</span>
-                    {driveSyncStatus === 'syncing' ? '연결 중...' : '지금 바로 동기화하기'}
+                    <span className={`material-symbols-outlined text-[20px] ${driveSyncStatus === 'syncing' ? 'animate-spin' : ''}`}>
+                      {driveSyncStatus === 'syncing' ? 'sync' : 'google_plus_reshare'}
+                    </span>
+                    {driveSyncStatus === 'syncing' ? '클라우드와 연결 하는 중...' : '지금 바로 데이터 동기화 시작하기'}
                   </button>
                 </div>
               </div>
