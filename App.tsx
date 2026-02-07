@@ -555,6 +555,7 @@ const App: React.FC = () => {
   const hiddenPdfInputRef = useRef<HTMLInputElement>(null);
   const [activePdfCategory, setActivePdfCategory] = useState<DocCategory | null>(null);
   const wakeLockRef = useRef<any>(null);
+  const transcriptRef = useRef<string>(''); // 🆕 실시간 텍스트 저장을 위한 Ref
 
   const days = ['월', '화', '수', '목', '금'];
   const periods = [1, 2, 3, 4, 5, 6, 7];
@@ -736,7 +737,9 @@ const App: React.FC = () => {
                 interimTranscript += transcript;
               }
             }
-            setRecordingTranscript(finalTranscript + interimTranscript);
+            const currentTotal = finalTranscript + interimTranscript;
+            transcriptRef.current = currentTotal; // 🆕 Ref 업데이트
+            setRecordingTranscript(currentTotal);
           };
 
           recognition.onerror = (event: any) => {
@@ -753,61 +756,81 @@ const App: React.FC = () => {
         setIsRecording(true);
         setLessonFeedback(null);
         setRecordingTranscript('');
+        transcriptRef.current = ''; // 🆕 초기화
       } catch (err) {
-        alert('마이크 권한이 필요합니다.');
+        console.error('Recording start error:', err);
+        alert('마이크 권한이 필요하거나 녹음 시작 중 오류가 발생했습니다.');
       }
     } else {
-      // Stop MediaRecorder
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-
-      if (wakeLockRef.current) await wakeLockRef.current.release();
-
-      // Stop speech recognition
-      if ((window as any).currentRecognition) {
-        (window as any).currentRecognition.stop();
-      }
-
+      // 🆕 종료 시 반응성 향상을 위해 즉시 상태 변경 시도
       setIsRecording(false);
 
-      // Get curriculum document URIs for reference
-      const curriculumDocs = docs.filter(d =>
-        d.category !== 'roster' &&
-        d.category !== 'schedule' &&
-        d.geminiFileUri &&
-        d.uploadStatus === 'completed'
-      );
-      const referenceDocUris = curriculumDocs.map(d => d.geminiFileUri!);
+      try {
+        // 1. MediaRecorder 중지
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          try {
+            mediaRecorderRef.current.stop();
+          } catch (e) {
+            console.error('MediaRecorder stop error:', e);
+          }
+        }
 
-      // Use actual recording transcript or fallback message
-      const transcript = recordingTranscript.trim() || "녹음된 내용이 없습니다. 마이크를 확인해주세요.";
+        // 2. WakeLock 해제 (iOS Safari 오류 방지)
+        if (wakeLockRef.current) {
+          try {
+            wakeLockRef.current.release().catch((e: any) => console.error('WakeLock release error:', e));
+            wakeLockRef.current = null;
+          } catch (e) {
+            console.error('WakeLock release sync error:', e);
+          }
+        }
 
-      // 백그라운드 분석을 위한 데이터 저장
-      if (selectedLesson) {
-        const pendingAnalysis: PendingAnalysis = {
-          id: Date.now().toString(),
-          timestamp: new Date().toISOString(),
-          lessonId: selectedLesson.id,
-          lessonTitle: selectedLesson.title,
-          transcript: transcript,
-          achievementCriteria: selectedLesson.achievementCriteria || "",
-          referenceDocUris: referenceDocUris,
-          studentNames: students.map(s => s.name),
-          status: 'pending'
-        };
+        // 3. SpeechRecognition 중지
+        if ((window as any).currentRecognition) {
+          try {
+            (window as any).currentRecognition.stop();
+          } catch (e) {
+            console.error('Recognition stop error:', e);
+          }
+        }
 
-        // localStorage에 저장 and start background processing
-        savePendingAnalysis(pendingAnalysis);
-        processAnalysisInBackground(pendingAnalysis.id);
+        // 4. 분석 데이터 처리
+        const transcript = transcriptRef.current.trim() || "녹음된 내용이 없습니다. 마이크를 확인해주세요.";
 
-        console.log('✅ 분석 작업이 백그라운드에서 시작되었습니다.');
-        alert('✅ 녹음이 종료되었습니다!\n\n분석은 백그라운드에서 진행됩니다.\n다른 작업을 계속하셔도 됩니다.');
+        if (selectedLesson) {
+          // 기존 분석 문서 참조
+          const curriculumDocs = docs.filter(d =>
+            d.category !== 'roster' &&
+            d.category !== 'schedule' &&
+            d.geminiFileUri &&
+            d.uploadStatus === 'completed'
+          );
+          const referenceDocUris = curriculumDocs.map(d => d.geminiFileUri!);
+
+          const pendingAnalysis: PendingAnalysis = {
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString(),
+            lessonId: selectedLesson.id,
+            lessonTitle: selectedLesson.title,
+            transcript: transcript,
+            achievementCriteria: selectedLesson.achievementCriteria || "",
+            referenceDocUris: referenceDocUris,
+            studentNames: students.map(s => s.name),
+            status: 'pending'
+          };
+
+          savePendingAnalysis(pendingAnalysis);
+          processAnalysisInBackground(pendingAnalysis.id);
+
+          alert('✅ 녹음이 종료되었습니다!\n분석은 클라우드에서 진행되니 잠시만 기다려주세요.');
+        }
+      } catch (error) {
+        console.error('Recording stop process error:', error);
+      } finally {
+        setIsGenerating(false);
       }
-
-      setIsGenerating(false);
     }
-  }, [isRecording, selectedLesson, docs, timetable, students, recordingTranscript]);
+  }, [isRecording, selectedLesson, docs, students]); // 🆕 recordingTranscript 의존성 제거
 
   const handleFileUploadRequest = (category: DocCategory) => {
     setActivePdfCategory(category);
