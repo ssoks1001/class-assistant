@@ -4,7 +4,7 @@ import { Student, ObservationRecord, AppView, CurriculumDoc, Lesson, DocCategory
 import { INITIAL_STUDENTS, MOCK_OBSERVATION, INITIAL_DOCS, TIMETABLE as INITIAL_TIMETABLE, MOCK_LESSON_REPORTS } from './constants';
 import { generateStudentReport, analyzeLessonFidelity, generateFinalReport, analyzePdfContent, extractStudentNamesFromPdf, extractStudentInteractions, StudentInteraction } from './services/geminiService';
 import { uploadFileToGemini, deleteFileFromGemini } from './services/fileUploadService';
-import { initGoogleAuth, requestAccessToken, findDataFile, uploadToDrive, downloadFromDrive } from './services/googleDriveService';
+
 
 // --- Sub-components ---
 
@@ -519,7 +519,6 @@ const App: React.FC = () => {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [selectedBatchGrade, setSelectedBatchGrade] = useState<string>('2');
   const [selectedBatchClass, setSelectedBatchClass] = useState<string>('3');
-  const [driveSyncStatus, setDriveSyncStatus] = useState<'idle' | 'syncing' | 'success'>('idle');
 
   const [manualView, setManualView] = useState<'none' | 'student' | 'timetable'>('none');
   const [newStudent, setNewStudent] = useState({ name: '', number: '', class: '3', grade: '2', imageUrl: '' });
@@ -624,9 +623,8 @@ const App: React.FC = () => {
     if (studentsUpdated) setStudents(finalStudents);
   }, [timetable, students]);
 
-  // 앱 시작 시 한 번만 마이그레이션 실행 및 구글 인증 초기화
+  // 앱 시작 시 한 번만 마이그레이션 실행
   useEffect(() => {
-    initGoogleAuth();
     const migrated = localStorage.getItem('data_migrated_v2');
     if (!migrated) {
       migrateAndSyncData();
@@ -1064,57 +1062,6 @@ const App: React.FC = () => {
       setSelectedBatchClass(firstSelected.classNumber.toString());
       setCurrentView('batch_report');
       setIsSelectionMode(false);
-    }
-  };
-
-  const handleSyncToDrive = async () => {
-    try {
-      setDriveSyncStatus('syncing');
-
-      // 1. 액세스 토큰 요청 (구글 로그인 팝업)
-      const token = await requestAccessToken();
-
-      // 2. 현재 데이터 패키징 (기존 백업 로직 활용)
-      const dataToSync = {
-        students,
-        timetable,
-        docs,
-        teacherInfo,
-        lessonPlans: localStorage.getItem('lessonPlans'),
-        curriculum: localStorage.getItem('curriculum'),
-      };
-
-      // 3. 구글 드라이브에서 기존 파일 찾기
-      const existingFileId = await findDataFile(token);
-
-      if (existingFileId) {
-        // 기존 데이터가 있으면 사용자에게 확인 (덮어쓰기 vs 불러오기)
-        if (window.confirm('구글 드라이브에 기존 데이터가 있습니다.\n\n[확인]: 현재 데이터를 드라이브에 저장(덮어쓰기)\n[취소]: 드라이브의 데이터를 이 기기로 불러오기')) {
-          await uploadToDrive(token, dataToSync, existingFileId);
-          alert('✅ 구글 드라이브에 데이터가 저장되었습니다.');
-        } else {
-          const downloadedData = await downloadFromDrive(token, existingFileId);
-          if (downloadedData) {
-            // 데이터 복원
-            if (downloadedData.students) setStudents(downloadedData.students);
-            if (downloadedData.timetable) setTimetable(downloadedData.timetable);
-            if (downloadedData.docs) setDocs(downloadedData.docs);
-            if (downloadedData.teacherInfo) setTeacherInfo(downloadedData.teacherInfo);
-            alert('✅ 구글 드라이브에서 데이터를 불러왔습니다!');
-          }
-        }
-      } else {
-        // 파일이 없으면 새로 업로드
-        await uploadToDrive(token, dataToSync);
-        alert('✅ 구글 드라이브에 새 백업 파일이 생성되었습니다.');
-      }
-
-      setDriveSyncStatus('success');
-      setTimeout(() => setDriveSyncStatus('idle'), 3000);
-    } catch (error) {
-      console.error('동기화 오류:', error);
-      setDriveSyncStatus('idle');
-      alert('❌ 동기화에 실패했습니다. 구글 로그인을 확인해주세요.');
     }
   };
 
@@ -1660,20 +1607,6 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          {isAllDone && (
-            <div className={`p-6 rounded-[2.5rem] border shadow-lg animate-fade-in ${isDarkMode ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-white border-primary/20'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">cloud_done</span>
-                  <h4 className="font-black text-[15px]">Google Drive 연동</h4>
-                </div>
-              </div>
-              <button onClick={handleSyncToDrive} disabled={driveSyncStatus === 'syncing'} className={`w-full h-14 rounded-2xl flex items-center justify-center gap-2 font-black transition-all ${driveSyncStatus === 'syncing' ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white active:scale-95'}`}>
-                {driveSyncStatus === 'syncing' ? <div className="size-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <img src="https://www.gstatic.com/images/branding/product/1x/drive_48dp.png" className="size-5" alt="Drive" />}
-                구글 드라이브로 저장하기
-              </button>
-            </div>
-          )}
         </div>
       );
     }
@@ -2059,49 +1992,6 @@ const App: React.FC = () => {
           <div className="animate-fade-in p-6 space-y-8 pb-32">
             <div className="flex flex-col gap-1"><h3 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>수업비서 셋업</h3><p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Configuration</p></div>
 
-            {/* 🆕 구글 드라이브 클라우드 동기화 (프리미엄 디자인 적용) */}
-            <div className={`p-6 rounded-[2.5rem] border shadow-md relative overflow-hidden transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-              <div className="absolute top-0 right-0 p-4 opacity-10">
-                <span className="material-symbols-outlined text-[100px] rotate-12">cloud_sync</span>
-              </div>
-
-              <div className="flex items-start gap-4 relative z-10">
-                <div className={`size-12 rounded-2xl flex items-center justify-center font-black shadow-inner ${isDarkMode ? 'bg-emerald-500/10 text-emerald-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                  <span className="material-symbols-outlined text-[28px]">cloud_sync</span>
-                </div>
-
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className={`text-lg font-black ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>구글 드라이브 클라우드 동기화</h4>
-                    <div className="flex items-center gap-2">
-                      {driveSyncStatus === 'syncing' && <div className="size-2 bg-emerald-500 rounded-full animate-pulse"></div>}
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${driveSyncStatus === 'syncing' ? 'text-emerald-500 animate-pulse' : 'text-slate-400'}`}>
-                        {driveSyncStatus === 'syncing' ? 'Syncing...' : 'Connected'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-400 font-bold mb-5 leading-relaxed">
-                    핸드폰과 PC 간에 실시간으로 데이터를 마법처럼 주고받습니다.<br />
-                    언제 어디서든 끊김 없는 수업 준비를 시작하세요.
-                  </p>
-
-                  <button
-                    onClick={handleSyncToDrive}
-                    disabled={driveSyncStatus === 'syncing'}
-                    className={`h-14 w-full rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${driveSyncStatus === 'syncing'
-                      ? 'bg-slate-100 text-slate-400 shadow-none'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/30'
-                      }`}
-                  >
-                    <span className={`material-symbols-outlined text-[20px] ${driveSyncStatus === 'syncing' ? 'animate-spin' : ''}`}>
-                      {driveSyncStatus === 'syncing' ? 'sync' : 'google_plus_reshare'}
-                    </span>
-                    {driveSyncStatus === 'syncing' ? '클라우드와 연결 하는 중...' : '지금 바로 데이터 동기화 시작하기'}
-                  </button>
-                </div>
-              </div>
-            </div>
 
             {/* 🆕 데이터 백업/복원 */}
             <div className={`p-5 rounded-2xl border-2 ${isDarkMode ? 'bg-blue-950/20 border-blue-900/30' : 'bg-blue-50 border-blue-200'}`}>
