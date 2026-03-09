@@ -821,6 +821,9 @@ const App: React.FC = () => {
           processAnalysisInBackground(pendingAnalysis.id);
 
           alert('✅ 녹음이 종료되었습니다!\n분석은 클라우드에서 진행되니 잠시만 기다려주세요.');
+        } else {
+          // 수업이 선택되지 않은 경우 - 안내 메시지
+          alert('⚠️ 분석할 수업이 선택되지 않았습니다.\n시간표에서 수업을 먼저 탭한 다음 녹음해주세요.');
         }
       } catch (error) {
         console.error('Recording stop process error:', error);
@@ -1345,15 +1348,25 @@ const App: React.FC = () => {
   // ========== 백그라운드 분석 관련 함수 ==========
 
   // localStorage 헬퍼 함수들
-  const savePendingAnalysis = (analysis: PendingAnalysis) => {
-    const analyses = getPendingAnalyses();
-    analyses.push(analysis);
-    localStorage.setItem('pendingAnalyses', JSON.stringify(analyses));
+  const getPendingAnalyses = (): PendingAnalysis[] => {
+    try {
+      const saved = localStorage.getItem('pendingAnalyses');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   };
 
-  const getPendingAnalyses = (): PendingAnalysis[] => {
-    const saved = localStorage.getItem('pendingAnalyses');
-    return saved ? JSON.parse(saved) : [];
+  const savePendingAnalysis = (analysis: PendingAnalysis) => {
+    const analyses = getPendingAnalyses();
+    // upsert: 같은 ID면 업데이트, 없으면 추가
+    const idx = analyses.findIndex(a => a.id === analysis.id);
+    if (idx >= 0) {
+      analyses[idx] = analysis;
+    } else {
+      analyses.push(analysis);
+    }
+    localStorage.setItem('pendingAnalyses', JSON.stringify(analyses));
   };
 
   const updateAnalysisStatus = (id: string, status: PendingAnalysis['status'], error?: string) => {
