@@ -30,6 +30,7 @@ export interface Lesson {
   period: number; // 1, 2, 3, 4, 5, 6, 7
   color: string;
   studentIds?: string[]; // 🆕 이 수업에 속한 학생들
+  referenceDocIds?: string[]; // 🆕 이 수업 분석에 참고할 AI 맞춤형 교육과정/단지계 문서 ID 목록
   history?: LessonReport[];
 }
 

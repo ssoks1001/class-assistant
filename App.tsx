@@ -280,10 +280,16 @@ const LessonModal: React.FC<{
   onDelete?: (id: string) => void;
   isDarkMode: boolean;
   days: string[];
-}> = ({ isOpen, onClose, lesson, position, onSave, onDelete, isDarkMode, days }) => {
+  docs: CurriculumDoc[];
+}> = ({ isOpen, onClose, lesson, position, onSave, onDelete, isDarkMode, days, docs }) => {
   const [title, setTitle] = useState('');
   const [grade, setGrade] = useState('2-3');
   const [selectedColor, setSelectedColor] = useState('bg-indigo-100 text-indigo-700');
+  const [referenceDocIds, setReferenceDocIds] = useState<string[]>([]);
+
+  // 교육과정 및 지도계획서 문서만 필터링
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const curriculumDocs = docs.filter(d => d.category !== 'roster' && d.category !== 'schedule' && d.uploadStatus === 'completed');
 
   const colorOptions = [
     { value: 'bg-indigo-100 text-indigo-700', label: '인디고', preview: 'bg-indigo-100' },
@@ -301,10 +307,12 @@ const LessonModal: React.FC<{
       setTitle(lesson.title || '');
       setGrade(lesson.grade || '2-3');
       setSelectedColor(lesson.color || 'bg-indigo-100 text-indigo-700');
+      setReferenceDocIds(lesson.referenceDocIds || []);
     } else if (position) {
       setTitle('');
       setGrade('2-3');
       setSelectedColor('bg-indigo-100 text-indigo-700');
+      setReferenceDocIds([]);
     }
   }, [lesson, position, isOpen]);
 
@@ -324,7 +332,8 @@ const LessonModal: React.FC<{
         period: lesson.period,
         color: selectedColor,
         room: lesson.room,
-        achievementCriteria: lesson.achievementCriteria
+        achievementCriteria: lesson.achievementCriteria,
+        referenceDocIds
       });
     } else if (position) {
       // Create new lesson
@@ -334,6 +343,7 @@ const LessonModal: React.FC<{
         day: position.day,
         period: position.period,
         color: selectedColor,
+        referenceDocIds
       });
     }
     onClose();
@@ -419,6 +429,41 @@ const LessonModal: React.FC<{
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                수업 분석용 참고 문서 매핑 (선택형)
+              </label>
+              {curriculumDocs.length > 0 ? (
+                <div className={`flex flex-col gap-2 max-h-32 overflow-y-auto p-3 rounded-2xl border ${isDarkMode ? 'border-slate-800 bg-slate-900/50' : 'border-slate-100 bg-slate-50'}`}>
+                  {curriculumDocs.map((doc) => {
+                    const isChecked = referenceDocIds.includes(doc.id);
+                    return (
+                      <label key={doc.id} className="flex items-center gap-3 cursor-pointer group">
+                        <div className={`size-5 rounded flex items-center justify-center transition-colors border-2 ${isChecked ? 'bg-primary border-primary text-white' : (isDarkMode ? 'border-slate-700 bg-slate-950 group-hover:border-slate-600' : 'border-slate-300 bg-white group-hover:border-slate-400')}`}>
+                          {isChecked && <span className="material-symbols-outlined text-[14px] font-black">check</span>}
+                        </div>
+                        <span className={`text-[13px] font-bold truncate line-clamp-1 flex-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{doc.name}</span>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) setReferenceDocIds(prev => [...prev, doc.id]);
+                            else setReferenceDocIds(prev => prev.filter(id => id !== doc.id));
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 font-bold px-1">등록된 단원지도계획서나 교육과정 문서가 없습니다.</p>
+              )}
+              <p className="text-[10px] text-slate-400 font-bold px-1 mt-1 leading-relaxed">
+                * 체크된 문서들만 이 수업 분석 시 전달됩니다. (미선택시 시스템 전체 참고)
+              </p>
             </div>
           </div>
 
@@ -795,11 +840,13 @@ const App: React.FC = () => {
 
         if (selectedLesson) {
           // 기존 분석 문서 참조
+          const hasSpecificDocs = selectedLesson.referenceDocIds && selectedLesson.referenceDocIds.length > 0;
           const curriculumDocs = docs.filter(d =>
             d.category !== 'roster' &&
             d.category !== 'schedule' &&
             d.geminiFileUri &&
-            d.uploadStatus === 'completed'
+            d.uploadStatus === 'completed' &&
+            (hasSpecificDocs ? selectedLesson.referenceDocIds!.includes(d.id) : true)
           );
           const referenceDocUris = curriculumDocs.map(d => d.geminiFileUri!);
 
@@ -2691,6 +2738,7 @@ const App: React.FC = () => {
         position={modalPosition}
         onSave={handleSaveLesson}
         days={days}
+        docs={docs}
       />
 
       {/* Add Comment Modal */}
