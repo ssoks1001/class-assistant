@@ -541,6 +541,16 @@ const App: React.FC = () => {
   const [isAddCommentModalOpen, setIsAddCommentModalOpen] = useState(false);
   const [newComment, setNewComment] = useState({ note: '' });
 
+  // Pending analyses state for UI
+  const [pendingAnalysesState, setPendingAnalysesState] = useState<PendingAnalysis[]>(() => {
+    try {
+      const saved = localStorage.getItem('pendingAnalyses');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Audio recording state
   const [recordedAudioBlob, setRecordedAudioBlob] = useState<Blob | null>(null);
   const [searchQuery, setSearchQuery] = useState(''); // 🆕 학생 검색
@@ -1347,7 +1357,6 @@ const App: React.FC = () => {
 
   const savePendingAnalysis = (analysis: PendingAnalysis) => {
     const analyses = getPendingAnalyses();
-    // upsert: 같은 ID면 업데이트, 없으면 추가
     const idx = analyses.findIndex(a => a.id === analysis.id);
     if (idx >= 0) {
       analyses[idx] = analysis;
@@ -1355,6 +1364,7 @@ const App: React.FC = () => {
       analyses.push(analysis);
     }
     localStorage.setItem('pendingAnalyses', JSON.stringify(analyses));
+    setPendingAnalysesState(analyses); // Update UI
   };
 
   const updateAnalysisStatus = (id: string, status: PendingAnalysis['status'], error?: string) => {
@@ -1363,12 +1373,14 @@ const App: React.FC = () => {
       a.id === id ? { ...a, status, error, retryCount: (a.retryCount || 0) + (error ? 1 : 0) } : a
     );
     localStorage.setItem('pendingAnalyses', JSON.stringify(updated));
+    setPendingAnalysesState(updated); // Update UI
   };
 
   const removePendingAnalysis = (id: string) => {
     const analyses = getPendingAnalyses();
     const filtered = analyses.filter(a => a.id !== id);
     localStorage.setItem('pendingAnalyses', JSON.stringify(filtered));
+    setPendingAnalysesState(filtered); // Update UI
   };
 
   // 백그라운드 분석 실행 함수
@@ -1690,8 +1702,11 @@ const App: React.FC = () => {
       // 최신 분석이 맨 위에 표시되도록 역순 정렬
       const displayHistory = [...allHistory].reverse();
 
+      // 찾기: 현재 선택된 수업의 처리 중인 분석 데이터
+      const pendingForLesson = pendingAnalysesState.find(a => a.lessonId === selectedLesson?.id && (a.status === 'pending' || a.status === 'processing'));
+
       // Show empty state if no history
-      if (displayHistory.length === 0) {
+      if (displayHistory.length === 0 && !pendingForLesson) {
         return (
           <div className="animate-fade-in px-6 pb-40 space-y-8">
             <div className="mt-6 flex flex-col gap-1">
@@ -1717,6 +1732,25 @@ const App: React.FC = () => {
 
           {/* Feedback History List */}
           <div className="space-y-6">
+            {pendingForLesson && (
+              <div className={`${isDarkMode ? 'bg-slate-900 border-primary' : 'bg-white border-primary'} relative overflow-hidden p-6 rounded-[2.5rem] border-2 shadow-lg space-y-4 ring-4 ring-primary/10 animate-pulse`}>
+                <div className="absolute top-0 left-0 w-full h-1 bg-primary/20">
+                   <div className="h-full bg-primary" style={{ width: '100%', animation: 'progress 2s infinite linear' }}></div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="size-6 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                  <div>
+                    <h4 className={`font-black text-[16px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>AI 수업 분석 중...</h4>
+                    <p className={`text-[12px] font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      음성을 텍스트로 바꾸고, 학생의 발화를 찾고 있습니다. (약 1분 소요)
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {displayHistory.map((report, idx) => {
               const isNew = idx === 0 && lessonFeedback;
               const indicators = [
