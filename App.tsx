@@ -521,7 +521,7 @@ const App: React.FC = () => {
   const [selectedBatchClass, setSelectedBatchClass] = useState<string>('3');
 
   const [manualView, setManualView] = useState<'none' | 'student' | 'timetable'>('none');
-  const [newStudent, setNewStudent] = useState({ name: '', number: '', class: '3', grade: '2', imageUrl: '' });
+  const [newStudent, setNewStudent] = useState({ names: '', startNumber: '1', class: '3', grade: '2', imageUrl: '' });
   const [newLesson, setNewLesson] = useState<Partial<Lesson>>({ title: '', grade: '2-3', day: 0, period: 1 });
 
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -1078,26 +1078,44 @@ const App: React.FC = () => {
   };
 
   const handleAddStudentManually = () => {
-    if (!newStudent.name || !newStudent.number) {
-      alert('학생 이름과 번호를 입력해주세요.');
+    if (!newStudent.names || !newStudent.startNumber) {
+      alert('학생 명단과 시작 번호를 입력해주세요.');
       return;
     }
-    const student: Student = {
-      id: Date.now().toString(),
-      name: newStudent.name,
-      studentNumber: parseInt(newStudent.number),
+
+    // 이름들을 파싱 (줄바꿈, 쉼표, 탭 등)하여 배열로 만듦
+    const parsedNames = newStudent.names
+      .split(/[\n,\t]+/)
+      .map(n => n.trim())
+      .filter(n => n.length > 0);
+
+    if (parsedNames.length === 0) {
+      alert('입력된 유효한 학생 이름이 없습니다.');
+      return;
+    }
+
+    if (parsedNames.length > 20) {
+      alert(`한 번에 20명까지만 추가할 수 있습니다. (현재 ${parsedNames.length}명)`);
+      return;
+    }
+
+    let currentNumber = parseInt(newStudent.startNumber) || 1;
+    const newStudentsAdded: Student[] = parsedNames.map((name, idx) => ({
+      id: Date.now().toString() + '-' + idx,
+      name: name,
+      studentNumber: currentNumber++,
       grade: newStudent.grade,
       classNumber: newStudent.class,
-      imageUrl: newStudent.imageUrl || 'https://picsum.photos/seed/' + newStudent.name + '/200/200',
+      imageUrl: newStudent.imageUrl || 'https://picsum.photos/seed/' + encodeURIComponent(name) + '/200/200',
       interactionCount: 0,
       status: 'active',
       history: []
-    };
-    const updated = [...students, student];
-    setStudents(updated);
-    setNewStudent({ name: '', number: '', class: '3', grade: '2', imageUrl: '' });
+    }));
+
+    setStudents(prev => [...prev, ...newStudentsAdded]);
+    setNewStudent({ names: '', startNumber: '1', class: '3', grade: '2', imageUrl: '' });
     setManualView('none');
-    alert(`${student.name} 학생이 등록되었습니다.`);
+    alert(`${newStudentsAdded.length}명의 학생이 한 번에 등록되었습니다.`);
   };
 
   const handleDeleteStudent = (id: string, e: React.MouseEvent) => {
@@ -1953,17 +1971,28 @@ const App: React.FC = () => {
                 <input type="text" value={newStudent.class} onChange={e => setNewStudent({ ...newStudent, class: e.target.value })} placeholder="3반" className={`w-full h-14 rounded-2xl px-5 font-bold border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-primary ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50'}`} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">번호</label>
-                <input type="number" value={newStudent.number} onChange={e => setNewStudent({ ...newStudent, number: e.target.value })} placeholder="1" className={`w-full h-14 rounded-2xl px-5 font-bold border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-primary ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50'}`} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">이름</label>
-                <input type="text" value={newStudent.name} onChange={e => setNewStudent({ ...newStudent, name: e.target.value })} placeholder="이름" className={`w-full h-14 rounded-2xl px-5 font-bold border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-primary ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50'}`} />
-              </div>
+            
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">시작 번호</label>
+              <input type="number" value={newStudent.startNumber} onChange={e => setNewStudent({ ...newStudent, startNumber: e.target.value })} placeholder="1" className={`w-full h-14 rounded-2xl px-5 font-bold border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-primary ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50'}`} />
+              <p className="text-[11px] font-bold text-slate-400 mt-1 ml-1 leading-relaxed">
+                현재 입력된 이름 수: <span className="text-primary font-black">{newStudent.names.split(/[\n,\t]+/).map(n => n.trim()).filter(n => n.length > 0).length}</span>명
+              </p>
             </div>
-            <button onClick={handleAddStudentManually} className="w-full h-16 bg-primary text-white rounded-3xl font-black shadow-xl shadow-blue-500/20 mt-4 transition-transform active:scale-95">학생 등록하기</button>
+            
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">다중 학생 명단 (최대 20명)</label>
+              <textarea 
+                value={newStudent.names} 
+                onChange={e => setNewStudent({ ...newStudent, names: e.target.value })} 
+                placeholder="엑셀에서 복사한 이름들을 한 번에 붙여넣으세요.&#13;&#10;줄바꿈, 쉼표, 탭 모두 자동으로 인식됩니다.&#13;&#10;예시: 홍길동, 김철수..." 
+                className={`w-full h-40 rounded-2xl p-5 font-bold border-0 ring-1 ring-slate-100 focus:ring-2 focus:ring-primary resize-none ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50'}`} 
+              />
+            </div>
+            <button onClick={handleAddStudentManually} className="w-full h-16 bg-primary text-white rounded-[2rem] font-black shadow-xl shadow-blue-500/20 mt-4 flex items-center justify-center gap-3 transition-transform active:scale-95">
+              <span className="material-symbols-outlined">group_add</span>
+              다중 학생 등록하기
+            </button>
           </div>
         </div>
       );
