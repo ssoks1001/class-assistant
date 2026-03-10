@@ -1504,8 +1504,8 @@ const App: React.FC = () => {
         const validInteractions = interactions.filter(i =>
           i.studentName &&
           i.studentName.trim().length > 0 &&
-          i.interaction &&
-          i.interaction.trim().length > 5
+          i.note &&
+          i.note.trim().length > 5
         );
 
         if (validInteractions.length > 0) {
@@ -1516,9 +1516,9 @@ const App: React.FC = () => {
                 date: new Date(analysis.timestamp).toLocaleDateString(),
                 lessonId: analysis.lessonId,
                 lessonTitle: analysis.lessonTitle,
-                observation: studentInteraction.interaction,
-                questionLevel: { tag: '활동', description: studentInteraction.interaction },
-                growthPoint: { title: '수업 참여', content: studentInteraction.interaction },
+                observation: studentInteraction.note,
+                questionLevel: { tag: '활동', description: studentInteraction.note },
+                growthPoint: { title: '수업 참여', content: studentInteraction.note },
                 interactionCount: 1
               };
               return {

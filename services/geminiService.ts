@@ -338,7 +338,7 @@ export const generateFinalReport = async (studentName: string, history: any[]): 
       - 반드시 위에 제공된 '한 학기 누적 관찰 기록'에 실제로 기록된 내용만을 근거로 작성하세요.
       - 기록에 없는 내용을 추측하거나 일반적인 학생 특성으로 보완하는 것을 금지합니다.
       - 기록이 충분하지 않아 확인할 수 없는 부분은 솔직하게 "관찰 기록 부족으로 확인 불가"로 표시하세요.
-      - "~했을 것으로 보입니다", "~로 기대됩니다" 같은 추측 표현 사용 금지.
+      - "~했을 것으로 보입니다", "~로 기대됩니다" 같은 추측 표현 금지.
 
       위 누적 기록을 바탕으로 생활기록부 '교과별 세부능력 및 특기사항'에 들어갈 최종 종합 보고서를 작성해줘.
       성취기준 달성 여부와 학생의 성장 변화가 잘 드러나야 함. (약 400자 내외, 평어체)
@@ -384,13 +384,24 @@ export const generateStudentReport = async (studentName: string, observationData
 };
 
 /**
- * 수업 녹취록에서 학생 이름과 상호작용 내용을 자동으로 추출
+ * 분석 진행 상태 인터페이스
+ */
+export interface AnalysisProgress {
+    status: 'idle' | 'uploading' | 'analyzing' | 'completed' | 'error';
+    message: string;
+}
+
+/**
+ * 학생 상호작용 인터페이스
  */
 export interface StudentInteraction {
     studentName: string;
-    interaction: string;
+    note: string;
 }
 
+/**
+ * 수업 녹취록에서 학생 이름과 상호작용 내용을 자동으로 추출
+ */
 export const extractStudentInteractions = async (
     transcript: string,
     studentNames: string[]
@@ -416,11 +427,11 @@ ${studentNames.join(', ')}
 **임무**: 녹취록에서 학생들의 활동이나 발표, 상호작용이 언급된 부분을 찾아 추출해주세요.
 
 **출력 형식**: JSON 배열
-각 항목은 { "studentName": "학생이름", "interaction": "상호작용 내용" } 형식
+각 항목은 { "studentName": "학생이름", "note": "상호작용 내용" } 형식
 
 **예시**:
-- "김철수가 산업혁명에 대해 발표했습니다" → { "studentName": "김철수", "interaction": "산업혁명에 대해 발표함" }
-- "이영희가 좋은 질문을 했어요" → { "studentName": "이영희", "interaction": "수업 참여 및 질문함" }
+- "김철수가 산업혁명에 대해 발표했습니다" → { "studentName": "김철수", "note": "산업혁명에 대해 발표함" }
+- "이영희가 좋은 질문을 했어요" → { "studentName": "이영희", "note": "수업 참여 및 질문함" }
 
 **주의사항**:
 - 명단에 있는 학생 이름만 추출
@@ -439,9 +450,9 @@ ${studentNames.join(', ')}
                         type: Type.OBJECT,
                         properties: {
                             studentName: { type: Type.STRING },
-                            interaction: { type: Type.STRING }
+                            note: { type: Type.STRING }
                         },
-                        required: ["studentName", "interaction"]
+                        required: ["studentName", "note"]
                     }
                 }
             }
