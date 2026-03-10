@@ -669,20 +669,8 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLesson?.id, selectedLesson?.history?.length]);
 
-  // 앱 시작 시 미완료 분석 재개
-  useEffect(() => {
-    const pendingAnalyses = getPendingAnalyses();
-    const incompletedAnalyses = pendingAnalyses.filter(
-      a => a.status === 'pending' || a.status === 'processing'
-    );
-
-    if (incompletedAnalyses.length > 0) {
-      console.log(`🔄 미완료 분석 ${incompletedAnalyses.length}개 발견. 재개합니다...`);
-      incompletedAnalyses.forEach(analysis => {
-        processAnalysisInBackground(analysis.id);
-      });
-    }
-  }, []); // 앱 시작 시 한 번만 실행
+  // 앱 시작 시 미완료 분석 재개 - ref로 플래그 관리 (TDZ 문제 방지)
+  const resumeAnalysisOnStartRef = useRef(false);
 
   const toggleStudentSelection = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -1420,6 +1408,15 @@ const App: React.FC = () => {
         return l;
       }));
 
+      // selectedLesson도 동기화 (분석 결과가 바로 화면에 반영되도록)
+      setSelectedLesson(prev => {
+        if (prev?.id === analysis.lessonId) {
+          const newHistory = prev.history ? [...prev.history, report] : [report];
+          return { ...prev, history: newHistory };
+        }
+        return prev;
+      });
+
       // 학생 상호작용 추출
       try {
         const interactions = await extractStudentInteractions(
@@ -1479,6 +1476,25 @@ const App: React.FC = () => {
       }, 3000);
     }
   };
+
+  // 앱 시작 시 미완료 분석 재개 (함수 정의 이후에 실행)
+  useEffect(() => {
+    if (resumeAnalysisOnStartRef.current) return;
+    resumeAnalysisOnStartRef.current = true;
+
+    const pendingAnalyses = getPendingAnalyses();
+    const incompletedAnalyses = pendingAnalyses.filter(
+      a => a.status === 'pending' || a.status === 'processing'
+    );
+
+    if (incompletedAnalyses.length > 0) {
+      console.log(`🔄 미완료 분석 ${incompletedAnalyses.length}개 발견. 재개합니다...`);
+      incompletedAnalyses.forEach(analysis => {
+        processAnalysisInBackground(analysis.id);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   const renderContent = () => {
@@ -1671,9 +1687,8 @@ const App: React.FC = () => {
       // Get all history for the selected lesson
       const allHistory = selectedLesson?.history || [];
 
-      // Display history directly without adding lessonFeedback again
-      // (lessonFeedback is already saved to history when recording stops)
-      const displayHistory = allHistory;
+      // 최신 분석이 맨 위에 표시되도록 역순 정렬
+      const displayHistory = [...allHistory].reverse();
 
       // Show empty state if no history
       if (displayHistory.length === 0) {
