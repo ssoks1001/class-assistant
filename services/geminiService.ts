@@ -184,6 +184,13 @@ export const analyzeLessonFidelity = async (
             };
         }
 
+        // API 키 확인
+        const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+        if (!apiKey) {
+            console.error("❌ VITE_GEMINI_API_KEY가 설정되지 않았습니다!");
+            throw new Error("API 키가 설정되지 않았습니다. Vercel 환경 변수(VITE_GEMINI_API_KEY)를 확인해주세요.");
+        }
+
         // Build contents array with transcript, plan, and reference documents
         const contents: any[] = [];
 
@@ -231,7 +238,7 @@ export const analyzeLessonFidelity = async (
         - 학생 상호작용(이름 언급, 발표, 질문)이 명확히 확인되지 않으면 interactionQuality는 3점 이하
         - 교육과정 성취기준과 무관한 내용이면 achievementAlignment는 3점 이하
         - 오개념이나 부정확한 내용이 있으면 contentAccuracy 5점 이하
-        - 단순히 존재만으로 점수를 주지 말고, 실제 품질을 엄격히 평가하세요
+        - 단순히 존재만으로 점수를 주지 말고, 실제 품질을 엄격하게 평가하세요
         - 형식적이거나 표면적인 수업은 낮은 점수
         
         [필수 포함 항목]
@@ -290,12 +297,27 @@ export const analyzeLessonFidelity = async (
 
         return JSON.parse(response.text || "{}");
     } catch (err) {
-        console.error("Lesson Fidelity Analysis Error:", err);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error("❌ Lesson Fidelity Analysis Error:", errorMessage);
+
+        // 참고 문서 URI가 만료/오류인 경우 → 참고 문서 없이 재시도 (폴백)
+        if (referenceDocuments && referenceDocuments.length > 0 &&
+            (errorMessage.includes('FILE_NOT_FOUND') ||
+             errorMessage.includes('invalid') ||
+             errorMessage.includes('expired') ||
+             errorMessage.includes('404') ||
+             errorMessage.includes('FAILED_PRECONDITION') ||
+             errorMessage.toLowerCase().includes('file') ||
+             errorMessage.includes('permission'))) {
+            console.warn("⚠️ 참고 문서 URI 오류. 참고 문서 없이 재시도합니다...");
+            return analyzeLessonFidelity(transcript, plan, undefined);
+        }
+
         return {
-            achievementAlignment: { score: 0, feedback: "분석 중 오류가 발생했습니다." },
+            achievementAlignment: { score: 0, feedback: `분석 오류: ${errorMessage.slice(0, 80)}` },
             contentAccuracy: { score: 0, feedback: "데이터를 불러올 수 없습니다." },
             interactionQuality: { score: 0, feedback: "다시 시도해주세요." },
-            inDepthAnalysis: "AI 분석 결과를 생성하는 도중 기술적인 오류가 발생했습니다. 잠시 후 다시 시도해주시기 바랍니다."
+            inDepthAnalysis: `AI 분석 결과를 생성하는 도중 기술적인 오류가 발생했습니다.\n\n[오류 내용]: ${errorMessage}\n\n[가능한 원인]:\n• API 키가 Vercel 환경 변수에 설정되지 않은 경우\n• API 사용 한도 초과\n• 교육과정 자료실의 PDF 파일 링크가 만료된 경우 (48시간 후 자동 삭제)\n\n[해결 방법]: Vercel 대시보드 → Settings → Environment Variables에서 VITE_GEMINI_API_KEY를 확인해주세요.`
         };
     }
 };
