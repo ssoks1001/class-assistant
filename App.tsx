@@ -447,7 +447,7 @@ const LessonModal: React.FC<{
                         <span className={`text-[13px] font-bold truncate line-clamp-1 flex-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>{doc.name}</span>
                         <input
                           type="checkbox"
-                          className="hidden"
+                          className="sr-only"
                           checked={isChecked}
                           onChange={(e) => {
                             if (e.target.checked) setReferenceDocIds(prev => [...prev, doc.id]);
@@ -1247,7 +1247,8 @@ const App: React.FC = () => {
         achievementCriteria: '',
         day: lessonData.day ?? 0,
         period: lessonData.period ?? 1,
-        color: lessonData.color || 'bg-indigo-100 text-indigo-700'
+        color: lessonData.color || 'bg-indigo-100 text-indigo-700',
+        referenceDocIds: lessonData.referenceDocIds || []
       };
       setTimetable(prev => [...prev, newLesson]);
     }
