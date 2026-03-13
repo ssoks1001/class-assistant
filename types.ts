@@ -91,6 +91,8 @@ export interface PendingAnalysis {
   lessonId: string;
   lessonTitle: string;
   transcript: string;
+  audioData?: string; // 🆕 오디오 분석용 Base64 데이터
+  audioMimeType?: string; // 🆕 오디오 마임타입 (audio/webm 등)
   achievementCriteria: string;
   referenceDocUris: string[];
   studentNames: string[];

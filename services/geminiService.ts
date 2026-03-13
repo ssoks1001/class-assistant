@@ -160,7 +160,9 @@ export const analyzePdfContent = async (base64DataOnly: string, fileName: string
 export const analyzeLessonFidelity = async (
     transcript: string,
     plan: string,
-    referenceDocuments?: string[] // Gemini File URIs
+    referenceDocuments?: string[], // Gemini File URIs
+    audioData?: string, // 🆕 오디오 Base64 (옵션)
+    audioMimeType?: string // 🆕 오디오 마임타입
 ): Promise<any> => {
     try {
         // Input validation: check if transcript is too short
@@ -195,6 +197,16 @@ export const analyzeLessonFidelity = async (
         // Build contents array with transcript, plan, and reference documents
         const contents: any[] = [];
 
+        // Add audio data if provided (Priority for analysis)
+        if (audioData) {
+            contents.push({
+                inlineData: {
+                    mimeType: audioMimeType || 'audio/webm',
+                    data: audioData
+                }
+            });
+        }
+
         // Add reference documents if provided
         if (referenceDocuments && referenceDocuments.length > 0) {
             for (const fileUri of referenceDocuments) {
@@ -217,7 +229,7 @@ export const analyzeLessonFidelity = async (
 
         // Add the analysis prompt
         contents.push(`
-        수업 녹취록: ${trimmedTranscript}
+        ${audioData ? '**[중요] 오디오 직접 분석**:\n제공된 오디오 파일을 직접 듣고 분석해주세요. 텍스트 녹취록은 참고용이며, 오디오의 어조, 속도, 학생들의 생생한 목소리를 바탕으로 더 정확하게 판단하세요.' : `수업 녹취록: ${trimmedTranscript}`}
         ${achievementText}
         ${referenceText}
 
@@ -404,10 +416,12 @@ export interface StudentInteraction {
  */
 export const extractStudentInteractions = async (
     transcript: string,
-    studentNames: string[]
+    studentNames: string[],
+    audioData?: string, // 🆕 오디오 Base64
+    audioMimeType?: string // 🆕 오디오 마임타입
 ): Promise<StudentInteraction[]> => {
     try {
-        if (!transcript || studentNames.length === 0) {
+        if ((!transcript && !audioData) || studentNames.length === 0) {
             return [];
         }
 
@@ -439,9 +453,22 @@ ${studentNames.join(', ')}
 - 상호작용 내용은 녹취록의 실제 발화를 요약 (30자 이내)
 `;
 
+        const contents: any[] = [];
+        
+        if (audioData) {
+            contents.push({
+                inlineData: {
+                    mimeType: audioMimeType || 'audio/webm',
+                    data: audioData
+                }
+            });
+        }
+        
+        contents.push({ text: prompt });
+
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
+            model: 'gemini-1.5-flash',
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {

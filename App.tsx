@@ -743,17 +743,29 @@ const App: React.FC = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if ('wakeLock' in navigator) wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
 
-        // Initialize MediaRecorder for audio file download
+        // Initialize MediaRecorder for audio file download - 32kbps for Gemini optimization
         audioChunksRef.current = [];
-        const mediaRecorder = new MediaRecorder(stream);
+        const options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 32000 };
+        const mediaRecorder = new MediaRecorder(stream, options);
+        
         mediaRecorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
             audioChunksRef.current.push(e.data);
           }
         };
-        mediaRecorder.onstop = () => {
+        
+        mediaRecorder.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           setRecordedAudioBlob(audioBlob);
+
+          // Convert to Base64 for analysis
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = () => {
+             const base64Audio = (reader.result as string).split(',')[1];
+             (window as any).lastAudioData = base64Audio;
+             (window as any).lastAudioMimeType = 'audio/webm';
+          };
         };
         mediaRecorder.start();
         mediaRecorderRef.current = mediaRecorder;
@@ -805,28 +817,20 @@ const App: React.FC = () => {
     } else {
       // 🆕 종료 시 반응성 향상을 위해 즉시 상태 변경 시도
       setIsRecording(false);
+      setIsGenerating(true); // 분석 중 표시
 
       try {
-        // 1. MediaRecorder 중지
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          try {
-            mediaRecorderRef.current.stop();
-          } catch (e) {
-            console.error('MediaRecorder stop error:', e);
-          }
-        }
-
-        // 2. WakeLock 해제 (iOS Safari 오류 방지)
+        // 1. WakeLock 해제 (iOS Safari 오류 방지)
         if (wakeLockRef.current) {
           try {
-            wakeLockRef.current.release().catch((e: any) => console.error('WakeLock release error:', e));
+            await wakeLockRef.current.release();
             wakeLockRef.current = null;
           } catch (e) {
-            console.error('WakeLock release sync error:', e);
+            console.error('WakeLock release error:', e);
           }
         }
 
-        // 3. SpeechRecognition 중지
+        // 2. SpeechRecognition 중지
         if ((window as any).currentRecognition) {
           try {
             (window as any).currentRecognition.stop();
@@ -835,11 +839,30 @@ const App: React.FC = () => {
           }
         }
 
+        // 3. MediaRecorder 중지 및 오디오 데이터 확보
+        let audioData: string | undefined = undefined;
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          const audioReadyPromise = new Promise<string>((resolve) => {
+            if (!mediaRecorderRef.current) return resolve('');
+            mediaRecorderRef.current.onstop = () => {
+              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+              setRecordedAudioBlob(audioBlob);
+              const reader = new FileReader();
+              reader.readAsDataURL(audioBlob);
+              reader.onloadend = () => {
+                const base64 = (reader.result as string).split(',')[1];
+                resolve(base64);
+              };
+            };
+          });
+          mediaRecorderRef.current.stop();
+          audioData = await audioReadyPromise;
+        }
+
         // 4. 분석 데이터 처리
         const transcript = transcriptRef.current.trim() || "녹음된 내용이 없습니다. 마이크를 확인해주세요.";
 
         if (selectedLesson) {
-          // 기존 분석 문서 참조
           const hasSpecificDocs = selectedLesson.referenceDocIds && selectedLesson.referenceDocIds.length > 0;
           const curriculumDocs = docs.filter(d =>
             d.category !== 'roster' &&
@@ -856,6 +879,8 @@ const App: React.FC = () => {
             lessonId: selectedLesson.id,
             lessonTitle: selectedLesson.title,
             transcript: transcript,
+            audioData: audioData, // 🆕 오디오 데이터 추가
+            audioMimeType: 'audio/webm',
             achievementCriteria: selectedLesson.achievementCriteria || "",
             referenceDocUris: referenceDocUris,
             studentNames: students.map(s => s.name),
@@ -865,9 +890,8 @@ const App: React.FC = () => {
           savePendingAnalysis(pendingAnalysis);
           processAnalysisInBackground(pendingAnalysis.id);
 
-          alert('✅ 녹음이 종료되었습니다!\n분석은 클라우드에서 진행되니 잠시만 기다려주세요.');
+          alert('✅ 녹음이 종료되었습니다!\nGemini AI가 오디오를 직접 듣고 정밀 분석을 시작합니다. 잠시만 기다려주세요.');
         } else {
-          // 수업이 선택되지 않은 경우 - 안내 메시지
           alert('⚠️ 분석할 수업이 선택되지 않았습니다.\n시간표에서 수업을 먼저 탭한 다음 녹음해주세요.');
         }
       } catch (error) {
@@ -1469,7 +1493,9 @@ const App: React.FC = () => {
       const result = await analyzeLessonFidelity(
         analysis.transcript,
         analysis.achievementCriteria,
-        analysis.referenceDocUris.length > 0 ? analysis.referenceDocUris : undefined
+        analysis.referenceDocUris.length > 0 ? analysis.referenceDocUris : undefined,
+        analysis.audioData,
+        analysis.audioMimeType
       );
 
       const report: LessonReport = {
@@ -1499,7 +1525,9 @@ const App: React.FC = () => {
       try {
         const interactions = await extractStudentInteractions(
           analysis.transcript,
-          analysis.studentNames
+          analysis.studentNames,
+          analysis.audioData,
+          analysis.audioMimeType
         );
 
         const validInteractions = interactions.filter(i =>
