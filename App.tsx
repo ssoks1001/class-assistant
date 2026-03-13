@@ -2580,6 +2580,88 @@ const App: React.FC = () => {
                   ? `누적 분석 ${selectedLesson.history.length}회`
                   : "아직 진행된 수업 분석 데이터가 없습니다."}
               </p>
+
+              {/* 🆕 수업별 참조 문서 선택 섹션 */}
+              <div className="mt-6 pt-5 border-t border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-blue-200">description</span>
+                    <span className="text-[13px] font-black text-white">분석 참고 문서 설정</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                        // 현재 선택된 문서 ID 목록을 기반으로 UI 상태 토글 등을 처리하기 위해 별도 상태 없이 직접 timetable 수정
+                    }}
+                    className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-black transition-all"
+                  >
+                    문서 변경
+                  </button>
+                </div>
+                
+                {(() => {
+                  const curriculumDocs = docs.filter(d => d.category !== 'roster' && d.category !== 'schedule' && d.uploadStatus === 'completed');
+                  const selectedDocIds = selectedLesson.referenceDocIds || [];
+                  const activeDocs = curriculumDocs.filter(d => selectedDocIds.includes(d.id));
+
+                  return (
+                    <div className="space-y-3">
+                        {/* 현재 선택된 문서들 표시 (Chips) */}
+                        <div className="flex flex-wrap gap-1.5">
+                            {activeDocs.length > 0 ? (
+                                activeDocs.map(d => (
+                                    <div key={d.id} className="px-2.5 py-1 bg-white/20 rounded-md text-[10px] font-bold flex items-center gap-1.5">
+                                        <span className="truncate max-w-[100px]">{d.name}</span>
+                                        <button 
+                                            onClick={() => {
+                                                const newIds = selectedDocIds.filter(id => id !== d.id);
+                                                handleSaveLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                                setSelectedLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                            }}
+                                            className="hover:text-red-300"
+                                        >
+                                            <span className="material-symbols-outlined text-[12px]">close</span>
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-[11px] text-blue-200 font-medium">선택된 문서가 없습니다. (전체 문서 참고)</p>
+                            )}
+                        </div>
+
+                        {/* 전체 목록에서 선택하기 (Dropdown/Collapse 형태로 제안했으나 여기서는 심플하게 목록 나열 지원) */}
+                        <div className="grid grid-cols-1 gap-1 mt-2">
+                            <details className="group">
+                                <summary className="list-none flex items-center gap-1 text-[10px] font-black text-blue-200 cursor-pointer hover:text-white transition-all">
+                                    <span className="material-symbols-outlined text-[14px] group-open:rotate-180 transition-transform">expand_more</span>
+                                    전체 문서 목록에서 선택
+                                </summary>
+                                <div className="mt-3 grid grid-cols-1 gap-1 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                                    {curriculumDocs.map(doc => {
+                                        const isChecked = selectedDocIds.includes(doc.id);
+                                        return (
+                                            <div 
+                                                key={doc.id} 
+                                                onClick={() => {
+                                                    const newIds = isChecked 
+                                                        ? selectedDocIds.filter(id => id !== doc.id)
+                                                        : [...selectedDocIds, doc.id];
+                                                    handleSaveLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                                    setSelectedLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                                }}
+                                                className={`px-3 py-2 rounded-xl text-[11px] font-bold cursor-pointer transition-all flex items-center justify-between ${isChecked ? 'bg-white text-primary' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+                                            >
+                                                <span className="truncate flex-1 pr-2">{doc.name}</span>
+                                                {isChecked && <span className="material-symbols-outlined text-[14px]">check_circle</span>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
             <div className="flex-1 flex flex-col items-center justify-center py-4">
               <div className="relative">
