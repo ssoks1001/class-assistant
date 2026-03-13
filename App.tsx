@@ -1850,7 +1850,13 @@ const App: React.FC = () => {
               const indicators = [
                 { label: '성취기준 정합성', value: report.achievementAlignment.score, feedback: report.achievementAlignment.feedback, color: 'bg-primary', icon: 'verified_user' },
                 { label: '내용 정확성', value: report.contentAccuracy.score, feedback: report.contentAccuracy.feedback, color: 'bg-emerald-500', icon: 'fact_check' },
-                { label: '상호작용 품질', value: report.interactionQuality.score, feedback: report.interactionQuality.feedback, color: 'bg-indigo-500', icon: 'record_voice_over' }
+                { 
+                  label: '추가 & 제언', 
+                  value: report.suggestions?.score ?? (report as any).interactionQuality?.score ?? 0, 
+                  feedback: report.suggestions?.feedback ?? (report as any).interactionQuality?.feedback ?? '', 
+                  color: 'bg-indigo-500', 
+                  icon: 'tips_and_updates' 
+                }
               ];
 
               return (

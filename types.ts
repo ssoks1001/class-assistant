@@ -44,7 +44,11 @@ export interface LessonReport {
     score: number;
     feedback: string;
   };
-  interactionQuality: {
+  suggestions: { // 🆕 상호작용 품질 -> 추가 및 제언으로 변경
+    score: number;
+    feedback: string;
+  };
+  interactionQuality?: { // ⚠️ 하위 호환성을 위해 유지
     score: number;
     feedback: string;
   };
