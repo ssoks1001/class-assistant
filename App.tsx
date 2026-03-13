@@ -600,6 +600,7 @@ const App: React.FC = () => {
   const [recordedAudioBlob, setRecordedAudioBlob] = useState<Blob | null>(null);
   const [searchQuery, setSearchQuery] = useState(''); // 🆕 학생 검색
   const [activeGradeClassFilter, setActiveGradeClassFilter] = useState<string | null>(null); // 🆕 학년/반 필터
+  const [isDocPickerOpen, setIsDocPickerOpen] = useState(false); // 🆕 녹음전 문서 선택 토글
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -2589,12 +2590,10 @@ const App: React.FC = () => {
                     <span className="text-[13px] font-black text-white">분석 참고 문서 설정</span>
                   </div>
                   <button 
-                    onClick={() => {
-                        // 현재 선택된 문서 ID 목록을 기반으로 UI 상태 토글 등을 처리하기 위해 별도 상태 없이 직접 timetable 수정
-                    }}
-                    className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-black transition-all"
+                    onClick={() => setIsDocPickerOpen(!isDocPickerOpen)}
+                    className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all ${isDocPickerOpen ? 'bg-white text-primary' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                   >
-                    문서 변경
+                    {isDocPickerOpen ? '닫기' : '문서 변경'}
                   </button>
                 </div>
                 
@@ -2606,37 +2605,36 @@ const App: React.FC = () => {
                   return (
                     <div className="space-y-3">
                         {/* 현재 선택된 문서들 표시 (Chips) */}
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 min-h-[28px]">
                             {activeDocs.length > 0 ? (
                                 activeDocs.map(d => (
-                                    <div key={d.id} className="px-2.5 py-1 bg-white/20 rounded-md text-[10px] font-bold flex items-center gap-1.5">
-                                        <span className="truncate max-w-[100px]">{d.name}</span>
+                                    <div key={d.id} className="px-2.5 py-1 bg-white/20 rounded-md text-[10px] font-bold flex items-center gap-1.5 border border-white/10">
+                                        <span className="truncate max-w-[120px]">{d.name}</span>
                                         <button 
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                e.stopPropagation();
                                                 const newIds = selectedDocIds.filter(id => id !== d.id);
-                                                handleSaveLesson({ ...selectedLesson, referenceDocIds: newIds });
-                                                setSelectedLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                                const updatedLesson = { ...selectedLesson, referenceDocIds: newIds };
+                                                setTimetable(prev => prev.map(l => l.id === selectedLesson.id ? updatedLesson : l));
+                                                setSelectedLesson(updatedLesson);
                                             }}
-                                            className="hover:text-red-300"
+                                            className="hover:text-red-300 transition-colors flex items-center"
                                         >
-                                            <span className="material-symbols-outlined text-[12px]">close</span>
+                                            <span className="material-symbols-outlined text-[14px]">close</span>
                                         </button>
                                     </div>
                                 ))
                             ) : (
-                                <p className="text-[11px] text-blue-200 font-medium">선택된 문서가 없습니다. (전체 문서 참고)</p>
+                                <p className="text-[11px] text-blue-200 font-medium opacity-70">선택된 문서가 없습니다. (전체 문서 참고)</p>
                             )}
                         </div>
 
-                        {/* 전체 목록에서 선택하기 (Dropdown/Collapse 형태로 제안했으나 여기서는 심플하게 목록 나열 지원) */}
-                        <div className="grid grid-cols-1 gap-1 mt-2">
-                            <details className="group">
-                                <summary className="list-none flex items-center gap-1 text-[10px] font-black text-blue-200 cursor-pointer hover:text-white transition-all">
-                                    <span className="material-symbols-outlined text-[14px] group-open:rotate-180 transition-transform">expand_more</span>
-                                    전체 문서 목록에서 선택
-                                </summary>
-                                <div className="mt-3 grid grid-cols-1 gap-1 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
-                                    {curriculumDocs.map(doc => {
+                        {/* 문서 선택 리스트 (Picker) */}
+                        {isDocPickerOpen && (
+                            <div className="mt-3 bg-white/5 rounded-2xl p-4 border border-white/10 animate-fade-in">
+                                <p className="text-[10px] font-black text-blue-200 mb-3 ml-1 uppercase">업로드된 문서 목록</p>
+                                <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                    {curriculumDocs.length > 0 ? curriculumDocs.map(doc => {
                                         const isChecked = selectedDocIds.includes(doc.id);
                                         return (
                                             <div 
@@ -2645,19 +2643,26 @@ const App: React.FC = () => {
                                                     const newIds = isChecked 
                                                         ? selectedDocIds.filter(id => id !== doc.id)
                                                         : [...selectedDocIds, doc.id];
-                                                    handleSaveLesson({ ...selectedLesson, referenceDocIds: newIds });
-                                                    setSelectedLesson({ ...selectedLesson, referenceDocIds: newIds });
+                                                    const updatedLesson = { ...selectedLesson, referenceDocIds: newIds };
+                                                    setTimetable(prev => prev.map(l => l.id === selectedLesson.id ? updatedLesson : l));
+                                                    setSelectedLesson(updatedLesson);
                                                 }}
-                                                className={`px-3 py-2 rounded-xl text-[11px] font-bold cursor-pointer transition-all flex items-center justify-between ${isChecked ? 'bg-white text-primary' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+                                                className={`px-4 py-3 rounded-xl text-[12px] font-bold cursor-pointer transition-all flex items-center justify-between border ${isChecked ? 'bg-white text-primary border-white' : 'bg-transparent text-white/60 border-white/10 hover:bg-white/5'}`}
                                             >
-                                                <span className="truncate flex-1 pr-2">{doc.name}</span>
-                                                {isChecked && <span className="material-symbols-outlined text-[14px]">check_circle</span>}
+                                                <span className="truncate flex-1 pr-3">{doc.name}</span>
+                                                <span className={`material-symbols-outlined text-[18px] ${isChecked ? 'text-primary' : 'text-white/20'}`}>
+                                                    {isChecked ? 'check_circle' : 'radio_button_unchecked'}
+                                                </span>
                                             </div>
                                         );
-                                    })}
+                                    }) : (
+                                        <div className="py-6 text-center">
+                                            <p className="text-[11px] text-white/40 font-medium">등록된 교육과정 문서가 없습니다.<br/>'셋업' 메뉴에서 문서를 먼저 등록해주세요.</p>
+                                        </div>
+                                    )}
                                 </div>
-                            </details>
-                        </div>
+                            </div>
+                        )}
                     </div>
                   );
                 })()}
