@@ -270,6 +270,10 @@ export const analyzeLessonFidelity = async (
         4. inDepthAnalysis (종합 심층 분석): 위 지표들을 아우르는 400~700자 사이의 전문적인 피드백
            - 반드시 녹취록에서 직접 확인한 내용만을 근거로 작성하세요.
            - "~했을 것으로 보입니다", "~로 추측됩니다" 같은 추측 표현 사용 금지.
+        5. examCoreContent (평가 문항 핵심 소스): 수업 내용 중 시험 문제로 출제하기 좋은 핵심 포인트 5~10개
+           - **[중요] 활동지(참조 문서) 기반 분석**: 업로드된 활동지 내용 중 실제 수업에서 비중 있게 다루어진 내용을 우선적으로 선정하세요.
+           - 교사가 여러 번 강조하거나, 학생들의 오답이 많았던 개념, 혹은 변별력이 있는 개념 위주로 추출하세요.
+           - 각 항목은 "문항 소재: [내용] | 근거: [수업 발화나 활동지 내용 요약]" 형식으로 작성하세요.
       `);
 
         const response = await ai.models.generateContent({
@@ -304,9 +308,13 @@ export const analyzeLessonFidelity = async (
                             },
                             required: ["score", "feedback"]
                         },
-                        inDepthAnalysis: { type: Type.STRING }
+                        inDepthAnalysis: { type: Type.STRING },
+                        examCoreContent: {
+                            type: Type.ARRAY,
+                            items: { type: Type.STRING }
+                        }
                     },
-                    required: ["achievementAlignment", "contentAccuracy", "interactionQuality", "inDepthAnalysis"]
+                    required: ["achievementAlignment", "contentAccuracy", "suggestions", "inDepthAnalysis", "examCoreContent"]
                 }
             }
         });

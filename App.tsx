@@ -1880,10 +1880,74 @@ const App: React.FC = () => {
         <div className="animate-fade-in px-6 pb-40 space-y-6">
           {/* Header */}
           <div className="mt-6 flex flex-col gap-1">
-            <h3 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedLesson?.title || "분석 리포트"}</h3>
-            <p className="text-sm text-slate-400 font-bold uppercase tracking-widest">
-              총 {displayHistory.length}회 수업 분석
-            </p>
+            <div className="flex justify-between items-end">
+              <div>
+                <h3 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{selectedLesson?.title || "분석 리포트"}</h3>
+                <p className="text-sm text-slate-400 font-bold uppercase tracking-widest">
+                  총 {displayHistory.length}회 수업 분석
+                </p>
+              </div>
+              {displayHistory.some(r => r.examCoreContent && r.examCoreContent.length > 0) && (
+                <button
+                  onClick={() => {
+                    const allSources = displayHistory
+                      .filter(r => r.examCoreContent && r.examCoreContent.length > 0)
+                      .map(r => ({
+                        date: new Date(r.date).toLocaleDateString(),
+                        content: r.examCoreContent!
+                      }));
+
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(`
+                        <html>
+                          <head>
+                            <title>평가 문항 소스 통합 리포트 - ${selectedLesson?.title}</title>
+                            <style>
+                              body { font-family: 'Pretendard', sans-serif; padding: 50px; line-height: 1.6; }
+                              .header { border-bottom: 3px solid #4F86F7; padding-bottom: 15px; margin-bottom: 30px; }
+                              h1 { margin: 0; color: #1a202c; }
+                              .lesson-info { color: #718096; margin-top: 5px; }
+                              .session { margin-bottom: 40px; }
+                              .session-title { font-weight: 800; font-size: 1.2em; color: #4F86F7; margin-bottom: 15px; border-left: 5px solid #4F86F7; padding-left: 15px; }
+                              .item { margin-bottom: 15px; padding: 20px; background: #f7fafc; border-radius: 12px; border: 1px solid #edf2f7; }
+                              .label { font-weight: bold; color: #4a5568; margin-top: 8px; font-size: 0.9em; display: block; border-top: 1px dashed #cbd5e0; pt: 8px; }
+                              @media print { .no-print { display: none; } }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="header">
+                              <h1>📑 평가 문항 소스 통합 리포트</h1>
+                              <div class="lesson-info">과목/단원: ${selectedLesson?.title} | 추출 항목: ${allSources.reduce((acc, s) => acc + s.content.length, 0)}개</div>
+                            </div>
+                            ${allSources.map(s => `
+                              <div class="session">
+                                <div class="session-title">${s.date} 수업 기록</div>
+                                ${s.content.map(item => {
+                                  const [text, reason] = item.split('|');
+                                  return `
+                                    <div class="item">
+                                      <strong>${text.trim()}</strong>
+                                      ${reason ? `<span class="label">💡 출제 근거: ${reason.trim()}</span>` : ''}
+                                    </div>
+                                  `;
+                                }).join('')}
+                              </div>
+                            `).join('')}
+                            <script>setTimeout(() => { window.print(); }, 500);</script>
+                          </body>
+                        </html>
+                      `);
+                      printWindow.document.close();
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-500 text-white font-black text-xs hover:bg-indigo-600 transition-all active:scale-95 shadow-md shadow-indigo-200"
+                >
+                  <span className="material-symbols-outlined text-[18px]">print_connect</span>
+                  전체 평가 소스 인쇄
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Feedback History List */}
@@ -2000,6 +2064,63 @@ const App: React.FC = () => {
                           {report.inDepthAnalysis}
                         </p>
                       </div>
+
+                      {/* 🆕 평가 문항 소싱 정보 */}
+                      {report.examCoreContent && report.examCoreContent.length > 0 && (
+                        <div className={`p-6 rounded-2xl ${isDarkMode ? 'bg-indigo-900/20 border-indigo-800' : 'bg-indigo-50 border-indigo-100'} border-2`}>
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <div className="size-8 rounded-xl bg-indigo-500 text-white flex items-center justify-center">
+                                <span className="material-symbols-outlined text-[18px]">quiz</span>
+                              </div>
+                              <h5 className={`font-black text-[14px] ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>평가 문항 소스 (출제 팁)</h5>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const printWindow = window.open('', '_blank');
+                                if (printWindow) {
+                                  printWindow.document.write(`
+                                    <html>
+                                      <head>
+                                        <title>평가 문항 소스 - ${selectedLesson?.title}</title>
+                                        <style>
+                                          body { font-family: 'Pretendard', sans-serif; padding: 40px; line-height: 1.6; }
+                                          h1 { border-bottom: 2px solid #4F86F7; padding-bottom: 10px; }
+                                          .date { color: #666; font-size: 0.9em; margin-bottom: 30px; }
+                                          .item { margin-bottom: 20px; padding: 15px; background: #f8f9fc; border-radius: 10px; }
+                                          .label { font-weight: bold; color: #4F86F7; }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h1>📝 평가 문항 핵심 소스</h1>
+                                        <div class="date">수업명: ${selectedLesson?.title} | 분석일: ${new Date(report.date).toLocaleDateString()}</div>
+                                        ${report.examCoreContent.map(item => `<div class="item">${item.replace('|', '<br><span class="label">근거:</span>')}</div>`).join('')}
+                                        <script>window.print();</script>
+                                      </body>
+                                    </html>
+                                  `);
+                                  printWindow.document.close();
+                                }
+                              }}
+                              className="text-[11px] font-bold text-indigo-500 flex items-center gap-1 hover:underline"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">print</span>
+                              인쇄하기
+                            </button>
+                          </div>
+                          <ul className="space-y-3">
+                            {report.examCoreContent.map((item, i) => {
+                              const [content, source] = item.split('|');
+                              return (
+                                <li key={i} className={`text-[13px] leading-relaxed p-3 rounded-xl ${isDarkMode ? 'bg-slate-900/50' : 'bg-white'}`}>
+                                  <div className={`font-black mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{content.trim()}</div>
+                                  {source && <div className="text-[11px] text-slate-400 font-medium">{source.trim()}</div>}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </details>
                 </div>

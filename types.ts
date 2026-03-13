@@ -53,6 +53,7 @@ export interface LessonReport {
     feedback: string;
   };
   inDepthAnalysis: string;
+  examCoreContent?: string[]; // 🆕 평가 문항 핵심 소싱 내용
 }
 
 export interface ObservationRecord {
