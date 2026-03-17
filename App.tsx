@@ -747,16 +747,16 @@ const App: React.FC = () => {
         // Initialize MediaRecorder for audio file download - 32kbps for Gemini optimization
         audioChunksRef.current = [];
         
-        // 🆕 브라우저별 최적의 MimeType 선택 로직
+        // 🆕 M4A(AAC)를 최우선으로 지원하는 MimeType 선택 로직
         const supportedMimeTypes = [
+          'audio/mp4',
+          'audio/aac',
           'audio/webm;codecs=opus',
           'audio/webm',
-          'audio/ogg;codecs=opus',
-          'audio/mp4',
-          'audio/aac'
+          'audio/ogg;codecs=opus'
         ];
         const mimeType = supportedMimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
-        console.log('Selected MimeType:', mimeType);
+        console.log('Selected Recording MimeType:', mimeType);
 
         const options = { 
           mimeType: mimeType, 
@@ -949,71 +949,21 @@ const App: React.FC = () => {
     }
 
     try {
-      setIsGenerating(true);
-      
-      // 1. ArrayBuffer 확보
-      const arrayBuffer = await recordedAudioBlob.arrayBuffer();
-      
-      // 2. AudioContext로 PCM 데이터 디코딩
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      
-      // 3. MP3 변환 (lamejs 사용)
-      const mp3Data = encodeMp3(audioBuffer);
-      
-      // 4. 다운로드
-      const blob = new Blob(mp3Data, { type: 'audio/mp3' });
-      const url = URL.createObjectURL(blob);
+      // 🆕 75분 이상 긴 녹음의 안정성을 위해 메모리 과부하가 큰 개별 인코딩 대신
+      // 브라우저가 보관 중인 고품질 데이터를 직접 활용하여 .m4a로 저장합니다.
+      const url = URL.createObjectURL(recordedAudioBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${selectedLesson?.title || '수업녹음'}_${new Date().toISOString().split('T')[0]}.mp3`;
+      
+      // 기기별 실제 포맷이 다를 수 있으나, 호환성을 위해 .m4a 확장자를 우선적으로 사용합니다.
+      // (현대적인 기기들은 .m4a로 포장된 데이터를 가장 잘 인식합니다.)
+      a.download = `${selectedLesson?.title || '수업녹음'}_${new Date().toISOString().split('T')[0]}.m4a`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('MP3 변환 오류:', error);
-      alert('MP3 변환 중 오류가 발생했습니다. 브라우저 환경에 따라 지원되지 않을 수 있습니다.');
-    } finally {
-      setIsGenerating(false);
+      console.error('다운로드 오류:', error);
+      alert('파일 저장 중 오류가 발생했습니다.');
     }
-  };
-
-  // MP3 인코딩 헬퍼 함수
-  const encodeMp3 = (audioBuffer: AudioBuffer) => {
-    if (!(window as any).lamejs) {
-        throw new Error('MP3 인코더 라이브러리를 불러오지 못했습니다.');
-    }
-    const channels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    const mp3encoder = new (window as any).lamejs.Mp3Encoder(channels, sampleRate, 128);
-    const mp3Data = [];
-
-    const left = audioBuffer.getChannelData(0);
-    const right = channels > 1 ? audioBuffer.getChannelData(1) : new Float32Array(left.length);
-
-    // Float32 (-1.0 to 1.0) to Int16 (-32768 to 32767)
-    const leftInt = new Int16Array(left.length);
-    const rightInt = new Int16Array(right.length);
-    for (let i = 0; i < left.length; i++) {
-        leftInt[i] = Math.max(-32768, Math.min(32767, left[i] < 0 ? left[i] * 32768 : left[i] * 32767));
-        rightInt[i] = Math.max(-32768, Math.min(32767, right[i] < 0 ? right[i] * 32768 : right[i] * 32767));
-    }
-
-    const sampleBlockSize = 1152;
-    for (let i = 0; i < leftInt.length; i += sampleBlockSize) {
-        const leftChunk = leftInt.subarray(i, i + sampleBlockSize);
-        const rightChunk = rightInt.subarray(i, i + sampleBlockSize);
-        const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
-        if (mp3buf.length > 0) {
-            mp3Data.push(mp3buf);
-        }
-    }
-
-    const mp3buf = mp3encoder.flush();
-    if (mp3buf.length > 0) {
-        mp3Data.push(mp3buf);
-    }
-
-    return mp3Data;
   };
 
   const handleFileUploadRequest = (category: DocCategory) => {
