@@ -746,7 +746,22 @@ const App: React.FC = () => {
 
         // Initialize MediaRecorder for audio file download - 32kbps for Gemini optimization
         audioChunksRef.current = [];
-        const options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 32000 };
+        
+        // 🆕 브라우저별 최적의 MimeType 선택 로직
+        const supportedMimeTypes = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/ogg;codecs=opus',
+          'audio/mp4',
+          'audio/aac'
+        ];
+        const mimeType = supportedMimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
+        console.log('Selected MimeType:', mimeType);
+
+        const options = { 
+          mimeType: mimeType, 
+          audioBitsPerSecond: 32000 
+        };
         const mediaRecorder = new MediaRecorder(stream, options);
         
         mediaRecorder.ondataavailable = (e) => {
@@ -768,7 +783,11 @@ const App: React.FC = () => {
              (window as any).lastAudioMimeType = 'audio/webm';
           };
         };
-        mediaRecorder.start();
+        mediaRecorder.onerror = (event: any) => {
+          console.error('MediaRecorder error:', event.error);
+        };
+
+        mediaRecorder.start(1000); // 🆕 1초 단위로 데이터 조각 확보 (안정성 강화)
         mediaRecorderRef.current = mediaRecorder;
 
         // Initialize Web Speech API
@@ -798,8 +817,27 @@ const App: React.FC = () => {
 
           recognition.onerror = (event: any) => {
             console.error('Speech recognition error:', event.error);
+            // 🆕 네트워크 에러 등 발생 시 알림 (선택 사항)
+            if (event.error === 'network') {
+                console.warn('Network error in speech recognition. Attempting to recover...');
+            }
           };
 
+          // 🆕 중요: 음성 인식이 도중에 중단되었을 때 자동으로 다시 시작하는 로직 (오뚝이 로직)
+          recognition.onend = () => {
+            console.log('Speech recognition service disconnected.');
+            // 사용자가 수동으로 종료한 것이 아니고 여전히 녹음 상태라면 재시작
+            if ((window as any).isRecordingManuallyStopped === false) {
+              console.log('Attempting to restart speech recognition...');
+              try {
+                recognition.start();
+              } catch (e) {
+                console.error('Failed to restart recognition:', e);
+              }
+            }
+          };
+
+          (window as any).isRecordingManuallyStopped = false; // 🆕 상태 제어 플래그
           recognition.start();
           (window as any).currentRecognition = recognition;
         } else {
@@ -817,6 +855,7 @@ const App: React.FC = () => {
       }
     } else {
       // 🆕 종료 시 반응성 향상을 위해 즉시 상태 변경 시도
+      (window as any).isRecordingManuallyStopped = true; // 🆕 자동 재시작 방지
       setIsRecording(false);
       setIsGenerating(true); // 분석 중 표시
 
