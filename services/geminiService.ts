@@ -199,12 +199,58 @@ export const analyzeLessonFidelity = async (
 
         // Add audio data if provided (Priority for analysis)
         if (audioData) {
-            contents.push({
-                inlineData: {
-                    mimeType: audioMimeType || 'audio/webm',
-                    data: audioData
+            // 🆕 오디오 크기 확인: Base64 길이 약 13,300,000자 ≈ 10MB 바이너리 (75분 = 약 23MB Base64)
+            const isLargeAudio = audioData.length > 13_300_000;
+            
+            if (isLargeAudio) {
+                // 🆕 대용량 오디오: Gemini File API 업로드 방식 (한도 없음, 최대 2GB 지원)
+                console.log(`🔼 대용량 오디오 감지 (${Math.round(audioData.length / 1_000_000)}MB Base64). File API 업로드 시작...`);
+                try {
+                    // Base64 → Blob 변환
+                    const binaryStr = atob(audioData);
+                    const bytes = new Uint8Array(binaryStr.length);
+                    for (let i = 0; i < binaryStr.length; i++) {
+                        bytes[i] = binaryStr.charCodeAt(i);
+                    }
+                    const audioBlob = new Blob([bytes], { type: audioMimeType || 'audio/webm' });
+                    const audioFile = new File([audioBlob], 'lesson_audio', { type: audioMimeType || 'audio/webm' });
+                    
+                    // Gemini File API로 업로드
+                    const uploadedFile = await ai.files.upload({
+                        file: audioFile,
+                        config: { mimeType: audioMimeType || 'audio/webm' }
+                    });
+                    
+                    console.log(`✅ File API 업로드 성공: ${uploadedFile.uri}`);
+                    
+                    // 파일 URI로 참조 (File API 방식)
+                    contents.push({
+                        fileData: {
+                            mimeType: audioMimeType || 'audio/webm',
+                            fileUri: uploadedFile.uri
+                        }
+                    });
+                    
+                } catch (uploadError) {
+                    console.warn('⚠️ File API 업로드 실패, inlineData로 폴백:', uploadError);
+                    // 업로드 실패 시 기존 방식으로 폴백
+                    contents.push({
+                        inlineData: {
+                            mimeType: audioMimeType || 'audio/webm',
+                            data: audioData
+                        }
+                    });
                 }
-            });
+            } else {
+                // 소용량 오디오: 기존 inlineData 방식 (빠름)
+                console.log(`📎 소용량 오디오 (${Math.round(audioData.length / 1_000_000)}MB Base64). inlineData 방식 사용.`);
+                contents.push({
+                    inlineData: {
+                        mimeType: audioMimeType || 'audio/webm',
+                        data: audioData
+                    }
+                });
+            }
         }
 
         // Add reference documents if provided
