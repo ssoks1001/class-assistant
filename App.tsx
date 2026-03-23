@@ -771,7 +771,7 @@ const App: React.FC = () => {
         };
         
         mediaRecorder.onstop = async () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
           setRecordedAudioBlob(audioBlob);
 
           // Convert to Base64 for analysis
@@ -780,7 +780,7 @@ const App: React.FC = () => {
           reader.onloadend = () => {
              const base64Audio = (reader.result as string).split(',')[1];
              (window as any).lastAudioData = base64Audio;
-             (window as any).lastAudioMimeType = 'audio/webm';
+             (window as any).lastAudioMimeType = mimeType || 'audio/webm'; // 🆕 실제 mimeType 저장
           };
         };
         mediaRecorder.onerror = (event: any) => {
@@ -881,11 +881,13 @@ const App: React.FC = () => {
 
         // 3. MediaRecorder 중지 및 오디오 데이터 확보
         let audioData: string | undefined = undefined;
+        let detectedMimeType = 'audio/webm'; // 폰백 기본값
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          detectedMimeType = mediaRecorderRef.current.mimeType || 'audio/webm'; // 🆕 실제 녹음 MimeType 가져오기
           const audioReadyPromise = new Promise<string>((resolve) => {
             if (!mediaRecorderRef.current) return resolve('');
             mediaRecorderRef.current.onstop = () => {
-              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+              const audioBlob = new Blob(audioChunksRef.current, { type: detectedMimeType });
               setRecordedAudioBlob(audioBlob);
               const reader = new FileReader();
               reader.readAsDataURL(audioBlob);
@@ -919,8 +921,8 @@ const App: React.FC = () => {
             lessonId: selectedLesson.id,
             lessonTitle: selectedLesson.title,
             transcript: transcript,
-            audioData: audioData, // 🆕 오디오 데이터 추가
-            audioMimeType: 'audio/webm',
+            audioData: audioData,
+            audioMimeType: detectedMimeType, // 🆕 실제 녹음된 MimeType 사용 (M4A등)
             achievementCriteria: selectedLesson.achievementCriteria || "",
             referenceDocUris: referenceDocUris,
             studentNames: students.map(s => s.name),

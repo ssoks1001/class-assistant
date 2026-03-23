@@ -134,7 +134,7 @@ export const extractStudentNamesFromPdf = async (base64DataOnly: string, fileNam
 export const analyzePdfContent = async (base64DataOnly: string, fileName: string): Promise<string> => {
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: [
                 {
                     inlineData: {
@@ -277,7 +277,7 @@ export const analyzeLessonFidelity = async (
       `);
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash', // 🆕 안정적인 1.5-flash 전환
             contents: contents,
             config: {
                 responseMimeType: "application/json",
@@ -370,7 +370,7 @@ export const generateFinalReport = async (studentName: string, history: any[]): 
     `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: 'gemini-1.5-pro', // 🆕 안정적인 1.5-pro 전환
             contents: prompt,
         });
         return response.text || "종합 보고서 생성 실패";
@@ -396,7 +396,7 @@ export const generateStudentReport = async (studentName: string, observationData
       전문적 평어체로 한 단락 초안 작성해줘.
     `;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash', // 🆕 안정적인 1.5-flash 전환
             contents: prompt,
         });
         return response.text || "초안 생성 실패";
