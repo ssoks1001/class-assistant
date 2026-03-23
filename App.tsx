@@ -600,7 +600,8 @@ const App: React.FC = () => {
   const [recordedAudioBlob, setRecordedAudioBlob] = useState<Blob | null>(null);
   const [searchQuery, setSearchQuery] = useState(''); // 🆕 학생 검색
   const [activeGradeClassFilter, setActiveGradeClassFilter] = useState<string | null>(null); // 🆕 학년/반 필터
-  const [isDocPickerOpen, setIsDocPickerOpen] = useState(false); // 🆕 녹음전 문서 선택 토글
+  const [isDocPickerOpen, setIsDocPickerOpen] = useState(false); // 녹음전 문서 선택 토글
+  const [analysisCompletedLesson, setAnalysisCompletedLesson] = useState<string | null>(null); // 🆕 분석 완료 팝업용
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -1620,6 +1621,19 @@ const App: React.FC = () => {
       // 분석 완료 처리
       updateAnalysisStatus(analysisId, 'completed');
 
+      // 🆕 분석 완료 브라우저 알림
+      const lessonTitleForNotif = analysis.lessonTitle;
+      if (Notification.permission === 'granted') {
+        new Notification('✅ 수업 분석 완료!', {
+          body: `"${lessonTitleForNotif}" 수업 리포트가 완성되었습니다. 지금 확인해보세요!`,
+          icon: '/favicon.ico',
+          tag: `analysis-${analysisId}`
+        });
+      }
+      // 🆕 앱 내 완료 팝업 상태 설정 (8초 후 자동 닫힘)
+      setAnalysisCompletedLesson(lessonTitleForNotif);
+      setTimeout(() => setAnalysisCompletedLesson(null), 8000);
+
       // 완료된 분석은 24시간 후 자동 삭제
       setTimeout(() => {
         removePendingAnalysis(analysisId);
@@ -1656,6 +1670,12 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🆕 앱 시작 시 브라우저 알림 권한 요청
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const renderContent = () => {
     if (isEditingProfile) {
@@ -3017,6 +3037,43 @@ const App: React.FC = () => {
 
   return (
     <div className={`max-w-md mx-auto min-h-screen relative shadow-2xl overflow-hidden pb-24 transition-colors duration-500 ${isDarkMode ? 'bg-slate-950 text-white' : 'bg-background-light text-slate-900'}`}>
+      {/* 🆕 실시간 분석 진행 상태 배너 */}
+      {pendingAnalysesState.some(a => a.status === 'processing' || a.status === 'pending') && (
+        <div className="absolute top-0 left-0 right-0 z-[110] bg-blue-600 text-white px-4 py-2 flex items-center justify-between animate-fade-in shadow-lg">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="material-symbols-outlined text-[18px] animate-spin">sync</span>
+            <span className="text-[12px] font-black truncate">
+              {pendingAnalysesState.filter(a => a.status === 'processing' || a.status === 'pending').length}개의 수업을 정밀 분석 중입니다...
+            </span>
+          </div>
+          <button onClick={() => setCurrentView('home')} className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-lg hover:bg-white/30 transition-colors">보기</button>
+        </div>
+      )}
+
+      {/* 🆕 분석 완료 알림 팝업 */}
+      {analysisCompletedLesson && (
+        <div className="fixed top-12 left-4 right-4 z-[120] animate-scale-in">
+          <div className={`p-5 rounded-2xl shadow-2xl border flex items-center gap-4 ${isDarkMode ? 'bg-slate-900 border-blue-500/50' : 'bg-white border-blue-100'} ring-4 ring-blue-500/10`}>
+            <div className="size-12 rounded-xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+              <span className="material-symbols-outlined text-[28px]">analytics</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`text-sm font-black truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{analysisCompletedLesson}</h4>
+              <p className="text-[11px] text-slate-400 font-bold">분석이 완료되어 리포트가 생성되었습니다!</p>
+            </div>
+            <button 
+              onClick={() => {
+                setAnalysisCompletedLesson(null);
+                setCurrentView('analysis');
+              }}
+              className="px-4 py-2 bg-blue-500 text-white text-[12px] font-black rounded-lg active:scale-95 transition-all"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
+
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} setView={(v) => { setCurrentView(v); setSelectedIds(new Set()); setIsSelectionMode(false); }} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)} onLogout={() => { setIsLoggedIn(false); setIsEditingProfile(false); }} onEditProfile={() => setIsEditingProfile(true)} teacherInfo={teacherInfo} />
       <Header title={headerInfo.title} subtitle={headerInfo.subtitle} onBack={manualView !== 'none' ? () => setManualView('none') : (isEditingProfile ? () => setIsEditingProfile(false) : (selectedStudent ? () => setSelectedStudent(null) : (currentView === 'batch_report' ? () => setCurrentView('records') : (selectedLesson && currentView === 'home' ? () => setSelectedLesson(null) : undefined))))} isRecording={isRecording} onMenuClick={() => setIsDrawerOpen(true)} isDarkMode={isDarkMode} teacherPhoto={teacherInfo.photoUrl} />
       <main className="overflow-y-auto no-scrollbar h-[calc(100vh-84px-84px)]">{renderContent()}</main>
