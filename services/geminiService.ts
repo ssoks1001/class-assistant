@@ -277,7 +277,7 @@ export const analyzeLessonFidelity = async (
       `);
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash', // 🆕 안정적인 1.5-flash 전환
+            model: 'gemini-2.5-flash', // 수업 분석은 고품질 모델 사용
             contents: contents,
             config: {
                 responseMimeType: "application/json",
@@ -370,7 +370,7 @@ export const generateFinalReport = async (studentName: string, history: any[]): 
     `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro', // 🆕 안정적인 1.5-pro 전환
+            model: 'gemini-2.5-pro', // 세특 작성은 최고 품질 모델 사용
             contents: prompt,
         });
         return response.text || "종합 보고서 생성 실패";
@@ -396,7 +396,7 @@ export const generateStudentReport = async (studentName: string, observationData
       전문적 평어체로 한 단락 초안 작성해줘.
     `;
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash', // 🆕 안정적인 1.5-flash 전환
+            model: 'gemini-2.5-flash', // 학생 리포트 초안도 고품질 모델 사용
             contents: prompt,
         });
         return response.text || "초안 생성 실패";
