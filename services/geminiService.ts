@@ -221,7 +221,23 @@ export const analyzeLessonFidelity = async (
                         config: { mimeType: audioMimeType || 'audio/webm' }
                     });
                     
-                    console.log(`✅ File API 업로드 성공: ${uploadedFile.uri}`);
+                    console.log(`✅ File API 업로드 성공: ${uploadedFile.uri}. 상태 확인 중...`);
+
+                    // 🆕 파일이 'ACTIVE' 상태가 될 때까지 대기 (폴링 로직)
+                    let fileStatus = await ai.files.get({ name: uploadedFile.name });
+                    let retryCount = 0;
+                    while (fileStatus.state === 'PROCESSING' && retryCount < 60) {
+                        console.log(`⏳ AI가 오디오 분석을 준비 중입니다... (${retryCount + 1}/60)`);
+                        await new Promise(resolve => setTimeout(resolve, 2000)); // 2초 대기
+                        fileStatus = await ai.files.get({ name: uploadedFile.name });
+                        retryCount++;
+                    }
+
+                    if (fileStatus.state !== 'ACTIVE') {
+                        throw new Error(`파일 준비 실패: 현재 상태 ${fileStatus.state}`);
+                    }
+
+                    console.log(`🚀 오디오 준비 완료! 분석을 시작합니다.`);
                     
                     // 파일 URI로 참조 (File API 방식)
                     contents.push({
@@ -230,6 +246,9 @@ export const analyzeLessonFidelity = async (
                             fileUri: uploadedFile.uri
                         }
                     });
+
+                    // 🆕 임시 파일명을 추적하여 나중에 삭제
+                    (window as any).lastUploadedAudioName = uploadedFile.name;
                     
                 } catch (uploadError) {
                     console.warn('⚠️ File API 업로드 실패, inlineData로 폴백:', uploadError);
@@ -322,6 +341,8 @@ export const analyzeLessonFidelity = async (
            - 각 항목은 "문항 소재: [내용] | 근거: [수업 발화나 활동지 내용 요약]" 형식으로 작성하세요.
       `);
 
+        // AI 호출 및 응답 처리
+        console.log("🤖 Gemini 분석 요청 중...");
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash', // 수업 분석은 고품질 모델 사용
             contents: contents,
@@ -364,6 +385,18 @@ export const analyzeLessonFidelity = async (
                 }
             }
         });
+
+        // 🆕 분석 완료 후 임시 파일 삭제 (리소스 정리)
+        if ((window as any).lastUploadedAudioName) {
+            try {
+                const nameToDelete = (window as any).lastUploadedAudioName;
+                delete (window as any).lastUploadedAudioName;
+                await ai.files.delete({ name: nameToDelete });
+                console.log("🧹 임시 오디오 파일 삭제 완료");
+            } catch (cleanupError) {
+                console.warn("⚠️ 임시 파일 삭제 실패:", cleanupError);
+            }
+        }
 
         return JSON.parse(response.text || "{}");
     } catch (err) {
