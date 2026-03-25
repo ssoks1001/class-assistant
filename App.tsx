@@ -1846,7 +1846,6 @@ const App: React.FC = () => {
                     if (lesson) {
                       setSelectedLesson(lesson);
                       setLessonFeedback(null); // Clear previous lesson's feedback
-                      setRecordedAudioBlob(null); // Clear previous lesson's recording
                     }
                   }}
                   className={`w-full h-14 rounded-2xl px-5 font-bold border-0 ring-1 focus:ring-2 focus:ring-primary transition-all ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white' : 'bg-slate-50 ring-slate-100 text-slate-900'}`}
@@ -2500,6 +2499,25 @@ const App: React.FC = () => {
                   <h3 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>시간표</h3>
                 </div>
               </div>
+
+              {/* 🆕 홈 화면 중앙 분석 상태 강화 (진행 중인 분석이 있을 때) */}
+              {pendingAnalysesState.some(a => a.status === 'processing' || a.status === 'pending') && (
+                <div className={`mx-2 mb-6 p-6 rounded-[2.5rem] border-2 border-primary/30 shadow-xl animate-pulse ${isDarkMode ? 'bg-blue-900/10' : 'bg-blue-50/50'}`}>
+                  <div className="flex items-center gap-4">
+                    <div className="size-12 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg">
+                      <span className="material-symbols-outlined text-[28px] animate-spin">sync</span>
+                    </div>
+                    <div>
+                      <h4 className={`text-[15px] font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                        AI가 수업을 정밀 분석 중입니다
+                      </h4>
+                      <p className="text-[12px] font-bold text-primary opacity-80">
+                        {pendingAnalysesState.filter(a => a.status === 'processing' || a.status === 'pending').length}개의 리포트를 생성하고 있습니다...
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className={`flex-1 rounded-[2.5rem] border overflow-hidden flex flex-col shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
                 <div className={`grid grid-cols-[1fr_1fr_1fr_1fr_1fr] border-b ${isDarkMode ? 'border-slate-800 bg-slate-800/30' : 'border-slate-50 bg-slate-50/50'}`}>
                   {days.map(day => (<div key={day} className={`h-10 flex items-center justify-center border-l ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} first:border-l-0`}><span className="text-[11px] font-black text-slate-400">{day}</span></div>))}
@@ -2529,7 +2547,6 @@ const App: React.FC = () => {
                                       e.stopPropagation();
                                       setSelectedLesson(lesson);
                                       setLessonFeedback(null); // Clear previous lesson's feedback
-                                      setRecordedAudioBlob(null); // Clear previous lesson's recording
                                     }}
                                     className={`flex-1 rounded-lg ${lesson.color} p-1 flex flex-col items-center justify-center shadow-sm text-center relative hover:scale-[1.05] hover:z-20 transition-all`}
                                   >
@@ -2555,6 +2572,24 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {/* 🆕 최근 녹음 다운로드 버튼 (홈 화면 최하단 영속 노출) */}
+              {recordedAudioBlob && !isRecording && (
+                <div className="mt-6 px-2">
+                  <button
+                    onClick={handleDownloadRecording}
+                    className={`w-full py-5 rounded-3xl font-black text-[14px] shadow-xl transition-all flex items-center justify-center gap-3 border-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700 shadow-slate-900/50' : 'bg-white border-slate-100 text-slate-900 hover:bg-slate-50 shadow-slate-200/50'}`}
+                  >
+                    <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[20px]">download</span>
+                    </div>
+                    직전에 녹음한 수업 파일 다운로드
+                  </button>
+                  <p className="text-center text-[10px] text-slate-400 font-bold mt-3 opacity-60">
+                    * 다음 수업 녹음을 시작하기 전까지 이 버튼이 유지됩니다.
+                  </p>
+                </div>
+              )}
             </div>
           );
         }
@@ -3077,7 +3112,7 @@ const App: React.FC = () => {
       <Drawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} setView={(v) => { setCurrentView(v); setSelectedIds(new Set()); setIsSelectionMode(false); }} isDarkMode={isDarkMode} toggleDarkMode={() => setIsDarkMode(!isDarkMode)} onLogout={() => { setIsLoggedIn(false); setIsEditingProfile(false); }} onEditProfile={() => setIsEditingProfile(true)} teacherInfo={teacherInfo} />
       <Header title={headerInfo.title} subtitle={headerInfo.subtitle} onBack={manualView !== 'none' ? () => setManualView('none') : (isEditingProfile ? () => setIsEditingProfile(false) : (selectedStudent ? () => setSelectedStudent(null) : (currentView === 'batch_report' ? () => setCurrentView('records') : (selectedLesson && currentView === 'home' ? () => setSelectedLesson(null) : undefined))))} isRecording={isRecording} onMenuClick={() => setIsDrawerOpen(true)} isDarkMode={isDarkMode} teacherPhoto={teacherInfo.photoUrl} />
       <main className="overflow-y-auto no-scrollbar h-[calc(100vh-84px-84px)]">{renderContent()}</main>
-      <NavigationBar activeView={currentView} setView={(v) => { setCurrentView(v); setSelectedStudent(null); setSelectedLesson(null); setIsEditingProfile(false); setManualView('none'); setIsSelectionMode(false); setSelectedIds(new Set()); }} isDarkMode={isDarkMode} />
+      <NavigationBar activeView={currentView} setView={(v) => { setCurrentView(v); setSelectedStudent(null); setIsEditingProfile(false); setManualView('none'); setIsSelectionMode(false); setSelectedIds(new Set()); }} isDarkMode={isDarkMode} />
 
       {/* Lesson Edit Modal */}
       <LessonModal
