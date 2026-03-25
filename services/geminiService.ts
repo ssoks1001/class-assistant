@@ -216,28 +216,35 @@ export const analyzeLessonFidelity = async (
                     const audioFile = new File([audioBlob], 'lesson_audio', { type: audioMimeType || 'audio/webm' });
                     
                     // Gemini File API로 업로드
+                    console.log(`📡 [Gemini] 파일 업로드 시도 중... (타입: ${audioMimeType || 'audio/webm'})`);
                     const uploadedFile = await ai.files.upload({
                         file: audioFile,
                         config: { mimeType: audioMimeType || 'audio/webm' }
                     });
                     
-                    console.log(`✅ File API 업로드 성공: ${uploadedFile.uri}. 상태 확인 중...`);
+                    console.log(`✅ [Gemini] File API 업로드 성공: ${uploadedFile.uri}`);
 
                     // 🆕 파일이 'ACTIVE' 상태가 될 때까지 대기 (폴링 로직)
                     let fileStatus = await ai.files.get({ name: uploadedFile.name });
                     let retryCount = 0;
-                    while (fileStatus.state === 'PROCESSING' && retryCount < 60) {
-                        console.log(`⏳ AI가 오디오 분석을 준비 중입니다... (${retryCount + 1}/60)`);
+                    const MAX_RETRIES = 150; // 150회 * 2초 = 300초 (5분) 대기
+                    
+                    console.log(`⏳ [Gemini] 오디오 인덱싱 대기 시작... (최대 5분)`);
+                    while (fileStatus.state === 'PROCESSING' && retryCount < MAX_RETRIES) {
+                        if (retryCount % 10 === 0) {
+                            console.log(`🔄 [Gemini] 인덱싱 진행 중... (${retryCount * 2}초 경과 / 최대 300초)`);
+                        }
                         await new Promise(resolve => setTimeout(resolve, 2000)); // 2초 대기
                         fileStatus = await ai.files.get({ name: uploadedFile.name });
                         retryCount++;
                     }
 
                     if (fileStatus.state !== 'ACTIVE') {
+                        console.error(`❌ [Gemini] 파일 준비 실패. 최종 상태: ${fileStatus.state}`);
                         throw new Error(`파일 준비 실패: 현재 상태 ${fileStatus.state}`);
                     }
 
-                    console.log(`🚀 오디오 준비 완료! 분석을 시작합니다.`);
+                    console.log(`🚀 [Gemini] 오디오 준비 완료! AI 분석을 실시간으로 시작합니다.`);
                     
                     // 파일 URI로 참조 (File API 방식)
                     contents.push({

@@ -4,6 +4,7 @@ import { Student, ObservationRecord, AppView, CurriculumDoc, Lesson, DocCategory
 import { INITIAL_STUDENTS, MOCK_OBSERVATION, INITIAL_DOCS, TIMETABLE as INITIAL_TIMETABLE, MOCK_LESSON_REPORTS } from './constants';
 import { generateStudentReport, analyzeLessonFidelity, generateFinalReport, analyzePdfContent, extractStudentNamesFromPdf, extractStudentInteractions, StudentInteraction } from './services/geminiService';
 import { uploadFileToGemini, deleteFileFromGemini } from './services/fileUploadService';
+import { saveLastRecording, loadLastRecording } from './services/storageService';
 
 
 // --- Sub-components ---
@@ -612,6 +613,7 @@ const App: React.FC = () => {
   const [activePdfCategory, setActivePdfCategory] = useState<DocCategory | null>(null);
   const wakeLockRef = useRef<any>(null);
   const transcriptRef = useRef<string>(''); // 🆕 실시간 텍스트 저장을 위한 Ref
+  const isRestoredRef = useRef(false); // 🆕 IndexedDB 복구 완료 여부 플래그
 
   const days = ['월', '화', '수', '목', '금'];
   const periods = [1, 2, 3, 4, 5, 6, 7];
@@ -704,6 +706,33 @@ const App: React.FC = () => {
     }
   }, [selectedHistoryIndex, selectedLesson]);
 
+  // ✅ 마지막 녹음 파일 IndexedDB 복구 (앱 시작 시 + 재로그인 시)
+  useEffect(() => {
+    const restoreRecording = async () => {
+      try {
+        const savedBlob = await loadLastRecording();
+        if (savedBlob) {
+          console.log('✅ IndexedDB에서 이전 녹음 복구 완료');
+          setRecordedAudioBlob(savedBlob);
+        }
+      } catch (err) {
+        console.error('IndexedDB 복구 실패:', err);
+      } finally {
+        isRestoredRef.current = true; // 복구 시도 완료 (성공/실패 무관)
+      }
+    };
+    restoreRecording();
+    // isLoggedIn이 변경될 때도 복구 시도 (로그아웃 → 재로그인 시나리오 대응)
+  }, [isLoggedIn]);
+
+  // 🆕 녹음 파일 변경 시 IndexedDB 저장
+  useEffect(() => {
+    // ⚠️ 복구 전에는 저장을 수행하지 않음 (초기 null 상태가 기존 데이터를 덮어쓰는 것 방지)
+    if (!isRestoredRef.current) return;
+    
+    saveLastRecording(recordedAudioBlob);
+  }, [recordedAudioBlob]);
+
   // Restore lesson history index when lesson changes
   useEffect(() => {
     if (selectedLesson) {
@@ -728,6 +757,7 @@ const App: React.FC = () => {
 
   // 앱 시작 시 미완료 분석 재개 - ref로 플래그 관리 (TDZ 문제 방지)
   const resumeAnalysisOnStartRef = useRef(false);
+
 
   const toggleStudentSelection = (id: string) => {
     const newSelected = new Set(selectedIds);
@@ -847,6 +877,8 @@ const App: React.FC = () => {
         }
 
         setIsRecording(true);
+        // ✅ 버그 수정: 새 녹음 시작 시 즉시 null을 세팅하면 IndexedDB 데이터가 삭제됨.
+        // 이전 녹음은 새 녹음이 완료될 때 덮어씌워지므로 여기서는 초기화하지 않음.
         setLessonFeedback(null);
         setRecordingTranscript('');
         transcriptRef.current = ''; // 🆕 초기화
@@ -1537,14 +1569,17 @@ const App: React.FC = () => {
 
     // 재시도 횟수 제한 (최대 3회)
     if ((analysis.retryCount || 0) >= 3) {
+      console.error(`🛑 [분석중단] ${analysisId}: 최대 재시도 횟수 초과`);
       updateAnalysisStatus(analysisId, 'failed', '최대 재시도 횟수 초과');
       return;
     }
 
     try {
+      console.log(`📡 [분석예약] ${analysisId}: ${analysis.lessonTitle} (${analysis.status})`);
       updateAnalysisStatus(analysisId, 'processing');
 
       // AI 분석 실행
+      console.log(`🔍 [분석중] ${analysisId}: Gemini API 호출 시작...`);
       const result = await analyzeLessonFidelity(
         analysis.transcript,
         analysis.achievementCriteria,
@@ -1553,6 +1588,7 @@ const App: React.FC = () => {
         analysis.audioMimeType
       );
 
+      console.log(`📊 [분석완료] ${analysisId}: 리포트 데이터 수신 완료`);
       const report: LessonReport = {
         date: new Date(analysis.timestamp).toLocaleDateString(),
         ...result
@@ -1567,7 +1603,7 @@ const App: React.FC = () => {
         return l;
       }));
 
-      // selectedLesson도 동기화 (분석 결과가 바로 화면에 반영되도록)
+      // selectedLesson도 동기화
       setSelectedLesson(prev => {
         if (prev?.id === analysis.lessonId) {
           const newHistory = prev.history ? [...prev.history, report] : [report];
@@ -1577,6 +1613,7 @@ const App: React.FC = () => {
       });
 
       // 학생 상호작용 추출
+      console.log(`👥 [학생분석] ${analysisId}: 개별 학생 상호작용 추출 중...`);
       try {
         const interactions = await extractStudentInteractions(
           analysis.transcript,
@@ -1586,10 +1623,8 @@ const App: React.FC = () => {
         );
 
         const validInteractions = interactions.filter(i =>
-          i.studentName &&
-          i.studentName.trim().length > 0 &&
-          i.note &&
-          i.note.trim().length > 5
+          i.studentName && i.studentName.trim().length > 0 &&
+          i.note && i.note.trim().length > 5
         );
 
         if (validInteractions.length > 0) {
@@ -1613,6 +1648,7 @@ const App: React.FC = () => {
             }
             return student;
           }));
+          console.log(`✅ [학생분석완료] ${analysisId}: ${validInteractions.length}명의 데이터 기록`);
         }
       } catch (error) {
         console.error('학생 상호작용 추출 실패:', error);
@@ -1639,15 +1675,17 @@ const App: React.FC = () => {
         removePendingAnalysis(analysisId);
       }, 24 * 60 * 60 * 1000);
 
-      console.log(`✅ 백그라운드 분석 완료: ${analysis.lessonTitle}`);
+      console.log(`🎉 [최종성공] ${analysisId}: 모든 프로세스가 완료되었습니다.`);
     } catch (error) {
-      console.error('백그라운드 분석 실패:', error);
+      console.error(`❌ [분석오류] ${analysisId}:`, error);
       updateAnalysisStatus(analysisId, 'failed', error instanceof Error ? error.message : '알 수 없는 오류');
 
-      // 재시도 (3초 후)
-      setTimeout(() => {
-        processAnalysisInBackground(analysisId);
-      }, 3000);
+      // 재시도 로직 (최대 3회)
+      const currentRetry = analysis.retryCount || 0;
+      if (currentRetry < 2) {
+        console.log(`🔄 [재시도 대기] 10초 후 복구 시도 (${currentRetry + 1}/3)`);
+        setTimeout(() => processAnalysisInBackground(analysisId), 10000);
+      }
     }
   };
 
@@ -2572,24 +2610,6 @@ const App: React.FC = () => {
                   ))}
                 </div>
               </div>
-
-              {/* 🆕 최근 녹음 다운로드 버튼 (홈 화면 최하단 영속 노출) */}
-              {recordedAudioBlob && !isRecording && (
-                <div className="mt-6 px-2">
-                  <button
-                    onClick={handleDownloadRecording}
-                    className={`w-full py-5 rounded-3xl font-black text-[14px] shadow-xl transition-all flex items-center justify-center gap-3 border-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700 shadow-slate-900/50' : 'bg-white border-slate-100 text-slate-900 hover:bg-slate-50 shadow-slate-200/50'}`}
-                  >
-                    <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[20px]">download</span>
-                    </div>
-                    직전에 녹음한 수업 파일 다운로드
-                  </button>
-                  <p className="text-center text-[10px] text-slate-400 font-bold mt-3 opacity-60">
-                    * 다음 수업 녹음을 시작하기 전까지 이 버튼이 유지됩니다.
-                  </p>
-                </div>
-              )}
             </div>
           );
         }
@@ -2714,7 +2734,7 @@ const App: React.FC = () => {
                 })()}
               </div>
             </div>
-            <div className="flex-1 flex flex-col items-center justify-center py-4">
+          <div className="flex-1 flex flex-col items-center justify-center py-4">
               <div className="relative">
                 {isRecording && <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping"></div>}
                 <button onClick={handleToggleRecording} className={`relative z-10 size-48 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl active:scale-95 ${isRecording ? 'bg-red-500 text-white' : (isDarkMode ? 'bg-slate-800 text-primary border-4 border-slate-700' : 'bg-white text-primary border-4 border-slate-50')}`}>
@@ -2752,17 +2772,91 @@ const App: React.FC = () => {
                   <p className="text-[13px] leading-relaxed line-clamp-3 opacity-80">{lessonFeedback.inDepthAnalysis}</p>
                 </div>
               )}
+            </div>
+          </div>
+        );
+      case 'analysis':
+        return (
+          <div className="animate-fade-in p-6 space-y-8 pb-32">
+            <div className="flex flex-col gap-1">
+              <h3 className={`text-xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>수업 역량 분석</h3>
+              <p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Professional Insights</p>
+            </div>
 
-              {/* 🆕 녹음 다운로드 버튼 */}
-              {recordedAudioBlob && !isRecording && (
-                <button
-                  onClick={handleDownloadRecording}
-                  className={`mt-4 w-full py-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${isDarkMode ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-900 hover:bg-slate-200'}`}
-                >
-                  <span className="material-symbols-outlined text-[20px]">download</span>
-                  최근 녹음 파일 다운로드
-                </button>
-              )}
+            {/* 🆕 실시간 AI 분석 실황 (현행) */}
+            {pendingAnalysesState.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <h4 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">AI 분석 실황</h4>
+                  <span className="px-2 py-0.5 bg-primary/10 text-primary rounded text-[10px] font-black">LIVE</span>
+                </div>
+                <div className="space-y-3">
+                  {pendingAnalysesState.slice().reverse().map(analysis => (
+                    <div key={analysis.id} className={`p-5 rounded-2xl border-2 transition-all ${analysis.status === 'processing' ? 'border-primary shadow-lg shadow-primary/5 bg-primary/5' : (isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100')}`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`size-12 rounded-2xl flex items-center justify-center shrink-0 ${analysis.status === 'completed' ? 'bg-emerald-500 text-white' : (analysis.status === 'failed' ? 'bg-red-500 text-white' : 'bg-primary text-white animate-pulse')}`}>
+                          <span className="material-symbols-outlined text-[28px]">
+                            {analysis.status === 'completed' ? 'check_circle' : (analysis.status === 'failed' ? 'error' : 'sync')}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className={`font-black text-sm truncate mb-1 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{analysis.lessonTitle}</h5>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${analysis.status === 'processing' ? 'bg-primary/20 text-primary uppercase animate-pulse' : (analysis.status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-slate-500/20 text-slate-500')}`}>
+                              {analysis.status === 'processing' ? '분석 중' : (analysis.status === 'completed' ? '완료' : (analysis.status === 'pending' ? '대기 중' : '실패'))}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold">{new Date(analysis.timestamp).toLocaleTimeString()}</span>
+                          </div>
+                          {analysis.error && <p className="mt-2 text-[10px] text-red-500 font-bold bg-red-50 dark:bg-red-950/30 p-2 rounded-lg">{analysis.error}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 🆕 수업 히스토리 검색 (완료된 건) */}
+            <div className="space-y-4">
+              <div className="px-2">
+                <h4 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">수업 리포트 기록</h4>
+              </div>
+              
+              <div className="relative">
+                <input 
+                  type="text"
+                  placeholder="수업명 또는 내용 검색..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full h-14 rounded-2xl px-12 text-sm font-bold border-0 ring-1 focus:ring-2 focus:ring-primary transition-all ${isDarkMode ? 'bg-slate-900 ring-slate-800 text-white placeholder:text-slate-600' : 'bg-white ring-slate-100 text-slate-900 placeholder:text-slate-400'}`}
+                />
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+              </div>
+
+              <div className="space-y-3">
+                {timetable.filter(l => l.history && l.history.length > 0).length > 0 ? (
+                  timetable
+                    .filter(l => l.history && l.history.length > 0)
+                    .map(lesson => (
+                      <div key={lesson.id} className={`p-6 rounded-[2.5rem] border hover:shadow-lg transition-all cursor-pointer ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100 surface-elevation'}`} onClick={() => { setSelectedLesson(lesson); setCurrentView('home'); }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className={`font-black text-[15px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{lesson.title}</h5>
+                          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{lesson.history.length}개의 리포트</span>
+                        </div>
+                        <p className="text-[12px] text-slate-400 font-medium line-clamp-2 leading-relaxed opacity-80">
+                          최근 분석: {lesson.history[lesson.history.length-1].date}
+                        </p>
+                      </div>
+                    ))
+                ) : (
+                  <div className="py-20 text-center space-y-4">
+                    <div className="size-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto opacity-50">
+                      <span className="material-symbols-outlined text-[32px] text-slate-400">inbox</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-400">아직 완료된 수업 분석 결과가 없습니다.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -3054,15 +3148,15 @@ const App: React.FC = () => {
   };
 
   const getHeaderInfo = () => {
-    if (isEditingProfile) return { title: "교사 정보 수정", subtitle: "Profile Settings" };
-    if (currentView === 'batch_report') return { title: "평가보고서 생성", subtitle: "Batch AI Writer" };
-    if (manualView !== 'none') return { title: manualView === 'student' ? '학생 추가' : '수업 추가', subtitle: "Manual Entry" };
-    if (selectedStudent) return { title: "학생 개별 분석", subtitle: "Assessment Record" };
+    if (isEditingProfile) return ({ title: "교사 정보 수정", subtitle: "Profile Settings" });
+    if (currentView === 'batch_report') return ({ title: "평가보고서 생성", subtitle: "Batch AI Writer" });
+    if (manualView !== 'none') return ({ title: manualView === 'student' ? '학생 추가' : '수업 추가', subtitle: "Manual Entry" });
+    if (selectedStudent) return ({ title: "학생 개별 분석", subtitle: "Assessment Record" });
     switch (currentView) {
-      case 'home': return { title: "시간표", subtitle: "" };
-      case 'analysis': return { title: "수업 역량 분석", subtitle: "Professional Insights" };
-      case 'settings': return { title: "자료 설정", subtitle: "Configuration" };
-      case 'records': default: return { title: "학생 성장 분석", subtitle: "Student Analysis List" };
+      case 'home': return ({ title: "시간표", subtitle: "" });
+      case 'analysis': return ({ title: "수업 역량 분석", subtitle: "Professional Insights" });
+      case 'settings': return ({ title: "자료 설정", subtitle: "Configuration" });
+      case 'records': default: return ({ title: "학생 성장 분석", subtitle: "Student Analysis List" });
     }
   };
 
@@ -3113,6 +3207,28 @@ const App: React.FC = () => {
       <Header title={headerInfo.title} subtitle={headerInfo.subtitle} onBack={manualView !== 'none' ? () => setManualView('none') : (isEditingProfile ? () => setIsEditingProfile(false) : (selectedStudent ? () => setSelectedStudent(null) : (currentView === 'batch_report' ? () => setCurrentView('records') : (selectedLesson && currentView === 'home' ? () => setSelectedLesson(null) : undefined))))} isRecording={isRecording} onMenuClick={() => setIsDrawerOpen(true)} isDarkMode={isDarkMode} teacherPhoto={teacherInfo.photoUrl} />
       <main className="overflow-y-auto no-scrollbar h-[calc(100vh-84px-84px)]">{renderContent()}</main>
       <NavigationBar activeView={currentView} setView={(v) => { setCurrentView(v); setSelectedStudent(null); setIsEditingProfile(false); setManualView('none'); setIsSelectionMode(false); setSelectedIds(new Set()); }} isDarkMode={isDarkMode} />
+
+      {/* 🆕 전역 녹음 다운로드 배너 (화면 하단 네비게이션 바로 위에 영속 노출) */}
+      {recordedAudioBlob && !isRecording && (
+        <div className={`fixed bottom-24 left-4 right-4 z-[95] animate-scale-in`}>
+          <div className={`p-4 rounded-2xl shadow-2xl border flex items-center gap-4 ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-100'} ring-4 ring-primary/5`}>
+            <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-[20px]">save_alt</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className={`text-[12px] font-black truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>직전 수업 녹음 파일</h4>
+              <p className="text-[10px] text-slate-400 font-bold">다음 녹음 전까지 보관됩니다</p>
+            </div>
+            <button 
+              onClick={handleDownloadRecording}
+              className="px-4 py-2 bg-primary text-white text-[11px] font-black rounded-lg active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">download</span>
+              다운로드
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Lesson Edit Modal */}
       <LessonModal
